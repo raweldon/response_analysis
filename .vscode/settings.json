@@ -1,0 +1,9 @@
+{
+    "git.ignoreLimitWarning": true,
+    "git.enabled": true,
+    "workbench.panel.defaultLocation": "right",
+    "python.pythonPath": "C:\\Users\\raweldon\\AppData\\Local\\Continuum\\Anaconda2\\python.exe",
+    "python.autoComplete.extraPaths": [
+        "C:\\Users\\raweldon\\AppData\\Local\\Continuum\\Anaconda2\\lib\\site-packages\\pandas"]
+    //"python.autoComplete.preloadModules":["numpy", "pandas", "matplotlib"]
+}
