@@ -2,8 +2,10 @@
     "git.ignoreLimitWarning": true,
     "git.enabled": true,
     "workbench.panel.defaultLocation": "right",
-    "python.pythonPath": "C:\\Users\\raweldon\\AppData\\Local\\Continuum\\Anaconda2\\python.exe",
+    "python.pythonPath": "C:\\Users\\bubbaw1293\\Anaconda3\\envs\\py27\\python.exe",
     "python.autoComplete.extraPaths": [
-        "C:\\Users\\raweldon\\AppData\\Local\\Continuum\\Anaconda2\\lib\\site-packages\\pandas"]
+        "C:\\Users\\raweldon\\AppData\\Local\\Continuum\\Anaconda2\\lib\\site-packages\\pandas"
+    ],
+    "python.linting.pylintEnabled": false
     //"python.autoComplete.preloadModules":["numpy", "pandas", "matplotlib"]
 }

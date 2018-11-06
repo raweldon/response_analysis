@@ -3,9 +3,11 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import re
 import time
+import os
 
 def pd_load(filename, p_dir):
     # converts pickled data into pandas DataFrame
+    print p_dir+filename
     data = pd.read_pickle(p_dir + filename)
     headers = data.pop(0)
     return pd.DataFrame(data, columns=headers)
@@ -56,8 +58,8 @@ def tilt_check(det_data, det, tilt, beam_11MeV):
             rot_order = [15, 16, 17, 18, 19, 6, 7, 0, 1, 2, 3, 4, 8, 9, 10, 5, 11, 12, 13, 14]
             angles = np.arange(0, 200, 10)
     else:
-        rot_order = [15, 16, 17, 18, 6, 7, 0, 1, 2, 3, 4, 8, 9, 10, 5, 11, 12, 13, 14]
-        angles = np.arange(0, 190, 10) 
+        rot_order = [12, 13, 5, 6, 0, 1, 2, 3, 7, 9, 9, 4, 10, 11]
+        angles =    [0, 20, 30, 40, 50, 60, 70, 80, 90, 100, 120, 140, 160, 180]
 
     tilt_df = tilt_df.assign(rot_order = rot_order)
 
@@ -67,7 +69,7 @@ def tilt_check(det_data, det, tilt, beam_11MeV):
     plt.errorbar(angles, tilt_df.ql_mean, yerr=tilt_df.ql_abs_uncert.values, ecolor='black', markerfacecolor='none', fmt='o', 
                  markeredgecolor='red', markeredgewidth=1, markersize=10, capsize=1)
     for rot, ang, t in zip(tilt_df.rotation, angles, tilt_df.ql_mean):
-        plt.annotate( rot, xy=(ang, t), xytext=(-3, 10), textcoords='offset points')
+        plt.annotate( str(rot) + '$^{\circ}$', xy=(ang, t), xytext=(-3, 10), textcoords='offset points')
     plt.xlim(-5, 185)
     plt.ylabel('light output (MeVee)')
     plt.xlabel('rotation angle (degree)')
@@ -75,24 +77,29 @@ def tilt_check(det_data, det, tilt, beam_11MeV):
     plt.title(name)
     
 def main():
-    p_dir = 'C:/Users/raweldon/Research/TUNL/git_programs/response_analysis/pickles/'
+    cwd = os.getcwd()
+    p_dir = cwd + '/pickles/'
+    p_dir = 'C:/users/bubbaw1293/work/ncsu_research/response_analysis/pickles/'
     fin = ['bvert_11MeV.p', 'cpvert_11MeV.p', 'bvert_4MeV.p', 'cpvert_4MeV.p']
+    fin = ['cpvert_4MeV.p']
     dets = [4, 5, 6 ,7 ,8 ,9, 10, 11, 12, 13, 14, 15]
-    tilts = [0, 45, -45, 30, -30, 15, -15]
 
     for f in fin:
         if '11' in f:
             beam_11MeV = True
+            tilts = [0, 45, -45, 30, -30, 15, -15]
+
         else:
             beam_11MeV = False
+            tilts = [0, 30, -30, 15, -15]
 
         data = pd_load(f, p_dir)
-        data = split_filenames(f)
+        data = split_filenames(data)
 
         for tilt in tilts:
             for det in dets:
                 print tilt, det
-                tilt_check(f, det, tilt, beam_11MeV)
+                tilt_check(data, det, tilt, beam_11MeV)
             plt.show()
 
 if __name__ == '__main__':
