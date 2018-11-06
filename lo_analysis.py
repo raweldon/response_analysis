@@ -42,17 +42,23 @@ def split_filenames(data):
     df_full = pd.concat([df, data], axis=1)
     return df_full
 
-def tilt_check(det_data, det, tilt):
+def tilt_check(det_data, det, tilt, beam_11MeV):
     # check lo for a given det and tilt
     det_df = det_data.loc[(det_data.det_no == str(det))]
     tilt_df = det_df[(det_df.tilt == str(tilt))]
-    print tilt_df
-    if len(tilt_df.filename) == 19:
-        rot_order = [15, 16, 17, 18, 6, 7, 0, 1, 2, 3, 4, 8, 9, 10, 5, 11, 12, 13, 14]
-        angles = np.arange(0, 190, 10)
+
+    # order by correct rot angle
+    if beam_11MeV:
+        if len(tilt_df.filename) == 19:
+            rot_order = [15, 16, 17, 18, 6, 7, 0, 1, 2, 3, 4, 8, 9, 10, 5, 11, 12, 13, 14]
+            angles = np.arange(0, 190, 10)
+        else:
+            rot_order = [15, 16, 17, 18, 19, 6, 7, 0, 1, 2, 3, 4, 8, 9, 10, 5, 11, 12, 13, 14]
+            angles = np.arange(0, 200, 10)
     else:
-        rot_order = [15, 16, 17, 18, 19, 6, 7, 0, 1, 2, 3, 4, 8, 9, 10, 5, 11, 12, 13, 14]
-        angles = np.arange(0, 200, 10)
+        rot_order = [15, 16, 17, 18, 6, 7, 0, 1, 2, 3, 4, 8, 9, 10, 5, 11, 12, 13, 14]
+        angles = np.arange(0, 190, 10) 
+
     tilt_df = tilt_df.assign(rot_order = rot_order)
 
     tilt_df = tilt_df.sort_values('rot_order')
@@ -70,18 +76,24 @@ def tilt_check(det_data, det, tilt):
     
 def main():
     p_dir = 'C:/Users/raweldon/Research/TUNL/git_programs/response_analysis/pickles/'
+    fin = ['bvert_11MeV.p', 'cpvert_11MeV.p', 'bvert_4MeV.p', 'cpvert_4MeV.p']
     dets = [4, 5, 6 ,7 ,8 ,9, 10, 11, 12, 13, 14, 15]
     tilts = [0, 45, -45, 30, -30, 15, -15]
 
-    b_11_data = pd_load('bvert_11MeV.p', p_dir)
-    b_11_data = split_filenames(b_11_data)
-    
-    for tilt in tilts:
-        for det in dets:
-            print tilt, det
-            tilt_check(b_11_data, det, tilt)
-        plt.show()
+    for f in fin:
+        if '11' in f:
+            beam_11MeV = True
+        else:
+            beam_11MeV = False
 
+        data = pd_load(f, p_dir)
+        data = split_filenames(f)
+
+        for tilt in tilts:
+            for det in dets:
+                print tilt, det
+                tilt_check(f, det, tilt, beam_11MeV)
+            plt.show()
 
 if __name__ == '__main__':
     main()
