@@ -7,6 +7,6 @@
         "C:\\Users\\raweldon\\AppData\\Local\\Continuum\\Anaconda2\\lib\\site-packages\\pandas"
     ],
     "python.linting.pylintEnabled": false,
-    "editor.quickSuggestionsDelay": 90,
+    "editor.quickSuggestionsDelay": 900, 
     //"python.autoComplete.preloadModules":["numpy", "pandas", "matplotlib"]
 }

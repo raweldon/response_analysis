@@ -6,6 +6,7 @@ import pandas as pd
 import re
 import time
 import os
+from scipy.interpolate import griddata
 
 def pd_load(filename, p_dir):
     # converts pickled data into pandas DataFrame
@@ -96,6 +97,12 @@ def tilt_check(det_data, dets, tilts, beam_11MeV):
             plt.legend()
         plt.show()
 
+def polar_to_cartesian(theta, phi):
+    x = np.sin(theta)*np.cos(phi)
+    y = np.sin(theta)*np.sin(phi)
+    z = np.cos(theta)
+    return x, y , z
+
 def plot_3d(data1, data2, det, theta_n, beam_11MeV):
     # convert to cartesian
     theta1 = data1.theta.values
@@ -105,12 +112,8 @@ def plot_3d(data1, data2, det, theta_n, beam_11MeV):
 
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
-    x1 = np.sin(theta1)*np.cos(phi1)
-    y1 = np.sin(theta1)*np.sin(phi1)
-    z1 = np.cos(theta1)
-    x2 = np.sin(theta2)*np.cos(phi2)
-    y2 = np.sin(theta2)*np.sin(phi2)
-    z2 = np.cos(theta2)
+    x1, y1, z1 = polar_to_cartesian(theta1, phi1)
+    x2, y2, z2 = polar_to_cartesian(theta2, phi2)
 
     # plot
     ax.scatter(x1, y1, z1, c='r', label='bvert')
@@ -168,7 +171,6 @@ def map_3d(data, det, tilts, crystal_orientation, theta_neutron, phi_neutron, be
             #get theta_p
             p_vector_dot_cp = np.dot(p_vector,rot_orientation[2]) # a.b=||a||*||b|| cos(theta)
             theta_p = np.rad2deg(np.arccos(p_vector_dot_cp))
-#            print '  theta_p =',theta_p
             
             # get phi_p
             vector_proj_ab = p_vector - p_vector_dot_cp*rot_orientation[2] # remove c' to get ab plane projection (scalar proj: a1 = a*cos(theta))
@@ -191,21 +193,18 @@ def map_3d(data, det, tilts, crystal_orientation, theta_neutron, phi_neutron, be
             thetap.append(np.deg2rad(theta_p))
             phip.append(np.deg2rad(phi_p))                 
 
-        print len(phip), len(thetap)
         update_df = tilt_df.assign(phi = phip)
         update_df = update_df.assign(theta = thetap)
         dfs.append(update_df)
     return pd.concat(dfs)
 
-
-def main():
+def main(check_tilt, plot_11, plot_4):
     cwd = os.getcwd()
     p_dir = cwd + '/pickles/'
     fin = ['bvert_11MeV.p', 'cpvert_11MeV.p', 'bvert_4MeV.p', 'cpvert_4MeV.p']
     dets = [4, 5, 6 ,7 ,8 ,9, 10, 11, 12, 13, 14, 15]
 
     # check individual tilt anlges
-    check_tilt = False
     if check_tilt:
         for f in fin:
             if '11' in f:
@@ -223,37 +222,86 @@ def main():
             tilt_check(data, dets, tilts, beam_11MeV)
     
     # 3d plotting
-    data_bvert = pd_load(fin[0], p_dir)
-    data_bvert = split_filenames(data_bvert)
-    data_cpvert = pd_load(fin[1], p_dir)
-    data_cpvert = split_filenames(data_cpvert)
+    ## scatter plots
+    theta_n = [70, 60, 50, 40, 30, 20, 20, 30, 40, 50, 60, 70]
+    phi_n = [180, 180, 180, 180, 180, 180, 180, 0, 0, 0, 0, 0]
+    bvert_tilt = [0, 45, -45, 30, -30, 15, -15]
+    cpvert_tilt = [0, 30, -30, 15, -15]
 
     # crystal orientations ((a_x, a_y, a_z),(b_x, b_y, b_z),(c'_x, c'_y, c'_z))
     b_up = np.asarray(((-1,0,0), (0,-1,0), (0,0,1)))
     cp_up = np.asarray(((-1,0,0), (0,0,1), (0,-1,0)))
 
-    theta_n = [70, 60, 50, 40, 30, 20, 20, 30, 40, 50, 60, 70]
-    phi_n = [180, 180, 180, 180, 180, 180, 180, 0, 0, 0, 0, 0]
-    bvert_tilt = [0, 45, -45, 30, -30, 15, -15]
-    cpvert_tilt = [0, 30, -30, 15, -15]
-    beam_11MeV = True
-#    for d, det in enumerate(dets):       
-#        df_b_mapped = map_3d(data_bvert, det, bvert_tilt, b_up, theta_n[d], phi_n[d], beam_11MeV) 
-#        df_cp_mapped = map_3d(data_cpvert, det, cpvert_tilt, cp_up, theta_n[d], phi_n[d], beam_11MeV)
-#        plot_3d(df_b_mapped, df_cp_mapped, det, theta_n[d], beam_11MeV)
-#    plt.show()
+    if plot_11:
+        data_bvert = pd_load(fin[0], p_dir)
+        data_bvert = split_filenames(data_bvert)
+        data_cpvert = pd_load(fin[1], p_dir)
+        data_cpvert = split_filenames(data_cpvert)
+        beam_11MeV = True
+        for d, det in enumerate(dets):       
+            df_b_mapped = map_3d(data_bvert, det, bvert_tilt, b_up, theta_n[d], phi_n[d], beam_11MeV) 
+            df_cp_mapped = map_3d(data_cpvert, det, cpvert_tilt, cp_up, theta_n[d], phi_n[d], beam_11MeV)
+            plot_3d(df_b_mapped, df_cp_mapped, det, theta_n[d], beam_11MeV)
+        plt.show()
 
-    data_bvert = pd_load(fin[2], p_dir)
+    if plot_4:
+        data_bvert = pd_load(fin[2], p_dir)
+        data_bvert = split_filenames(data_bvert)
+        data_cpvert = pd_load(fin[3], p_dir)
+        data_cpvert = split_filenames(data_cpvert)
+        beam_11MeV = False
+        for d, det in enumerate(dets):       
+            df_b_mapped = map_3d(data_bvert, det, bvert_tilt, b_up, theta_n[d], phi_n[d], beam_11MeV=False) 
+            df_cp_mapped = map_3d(data_cpvert, det, cpvert_tilt, cp_up, theta_n[d], phi_n[d], beam_11MeV=False)
+            plot_3d(df_b_mapped, df_cp_mapped, det, theta_n[d], beam_11MeV)
+        plt.show()
+
+    ## heat maps
+    data_bvert = pd_load(fin[0], p_dir)
     data_bvert = split_filenames(data_bvert)
-    data_cpvert = pd_load(fin[3], p_dir)
+    data_cpvert = pd_load(fin[1], p_dir)
     data_cpvert = split_filenames(data_cpvert)
-    beam_11MeV = False
+
+    beam_11MeV = True
     for d, det in enumerate(dets):       
-        df_b_mapped = map_3d(data_bvert, det, bvert_tilt, b_up, theta_n[d], phi_n[d], beam_11MeV=False) 
-        df_cp_mapped = map_3d(data_cpvert, det, cpvert_tilt, cp_up, theta_n[d], phi_n[d], beam_11MeV=False)
-        plot_3d(df_b_mapped, df_cp_mapped, det, theta_n[d], beam_11MeV)
-    plt.show()
+        df_b_mapped = map_3d(data_bvert, det, bvert_tilt, b_up, theta_n[d], phi_n[d], beam_11MeV) 
+        df_cp_mapped = map_3d(data_cpvert, det, cpvert_tilt, cp_up, theta_n[d], phi_n[d], beam_11MeV)
+
+        ql = np.concatenate([df_b_mapped.ql_mean.values,df_cp_mapped.ql_mean.values])
+        theta = np.concatenate([df_b_mapped.theta.values,df_cp_mapped.theta.values])
+        phi = np.concatenate([df_b_mapped.phi.values,df_cp_mapped.phi.values])
+        # make grid
+        X = np.arange(-1, 1.01, 0.01)
+        Y = np.arange(-1, 1.01, 0.01)
+        Z = np.arange(-1, 1.01, 0.01)
+        #X, Y, Z = np.meshgrid(X, Y, Z)
+        x, y, z = polar_to_cartesian(theta, phi)
+
+        interp = griddata((x, y, z), ql, (X, Y, Z), method='linear')
+        
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+
+        #ax.scatter(x, y, z, c=ql, cmap=plt.hot(), zorder=100)
+        ax.plot_surface(X, Y, Z, facecolors=cm.hot(ql/ql.max()))
+        ax.set_xlim([-1.1,1.1])
+        ax.set_ylim([-1.1,1.1])
+        ax.set_zlim([-1.1,1.1])
+        ax.set_xlabel('a')
+        ax.set_ylabel('b')
+        ax.set_zlabel('c\'')
+        ax.set_aspect('equal')
+        #if beam_11MeV:
+        #    ax.set_title('11.3 MeV beam, det ' + str(det) + '  (' + str(theta_n) +'$^{\circ}$)')
+        #else:
+        #    ax.set_title('4.8 MeV beam, det ' + str(det) + '  (' + str(theta_n) +'$^{\circ}$)')
+        plt.tight_layout()       
+        plt.show() 
 
 
 if __name__ == '__main__':
-    main()
+    plot_11 = False
+    plot_4 = False
+    check_tilt = False
+    
+    main(check_tilt, plot_11, plot_4)
