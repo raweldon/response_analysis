@@ -6,6 +6,7 @@
     "python.autoComplete.extraPaths": [
         "C:\\Users\\raweldon\\AppData\\Local\\Continuum\\Anaconda2\\lib\\site-packages\\pandas"
     ],
-    "python.linting.pylintEnabled": false
+    "python.linting.pylintEnabled": false,
+    "editor.quickSuggestionsDelay": 90,
     //"python.autoComplete.preloadModules":["numpy", "pandas", "matplotlib"]
 }
