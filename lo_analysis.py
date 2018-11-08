@@ -1,13 +1,13 @@
+import pyface.qt  # must import first to use mayavi
 import numpy as np 
-import matplotlib
-matplotlib.use('TkAgg') # speeds up 3D rendering
-import pyplot as plt
+import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
 import pandas as pd
 import re
 import time
 import os
+from mayavi import mlab
 from scipy.interpolate import griddata
 
 def pd_load(filename, p_dir):
@@ -274,46 +274,15 @@ def main(check_tilt, plot_11, plot_4):
         ql = np.concatenate([df_b_mapped.ql_mean.values,df_cp_mapped.ql_mean.values, df_b_mapped_mirror.ql_mean.values,df_cp_mapped_mirror.ql_mean.values])
         theta = np.concatenate([df_b_mapped.theta.values,df_cp_mapped.theta.values, df_b_mapped_mirror.theta.values,df_cp_mapped_mirror.theta.values])
         phi = np.concatenate([df_b_mapped.phi.values,df_cp_mapped.phi.values, df_b_mapped_mirror.phi.values,df_cp_mapped_mirror.phi.values])
-        # make grid
-        step = 0.01
-        u = np.linspace(theta.min(), theta.max(), len(ql)) # theta
-        v = np.linspace(phi.min(), phi.max(), len(ql)) # phi
-        X = np.outer(np.cos(v), np.sin(u))
-        Y = np.outer(np.sin(v), np.sin(u))
-        Z = np.outer(np.ones(np.size(v)), np.cos(u))        
-        print len(X), len(ql)
+
+        theta_mesh, phi_mesh = np.mgrid[min(theta):max(theta):len(ql)+1, min(phi):max(phi):len(ql)+1]
+        x_mesh, y_mesh, z_mesh = polar_to_cartesian(theta_mesh, phi_mesh)
+
         x, y, z = polar_to_cartesian(theta, phi)
-        
-        # scale ql between 0, 1
-        ql = (ql - min(ql))/(max(ql) - min(ql))
-        print max(ql), min(ql)
 
-        ql_interp = griddata((x, y, z), ql, (X, Y, Z), method='nearest')
-        print ql_interp
-        heatmap = cm.ScalarMappable(cmap='viridis').to_rgba(ql_interp)
+        interp = griddata((x, y, z), ql, (x_mesh, y_mesh, z_mesh))
 
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-
-        #ax.scatter(x, y, z, c=ql, cmap=plt.hot(), zorder=100)
-        ax.scatter(x, y, z, c='k', zorder=10)
-        #ax.plot_surface(X, Y, Z, cstride=1, rstride=1, facecolors=heatmap, alpha=1.0, zorder=0)
-        ax.set_xlim([-1.1,1.1])
-        ax.set_ylim([-1.1,1.1])
-        ax.set_zlim([-1.1,1.1])
-        ax.set_xlabel('a')
-        ax.set_ylabel('b')
-        ax.set_zlabel('c\'')
-        ax.set_aspect('equal')
-        #if beam_11MeV:
-        #    ax.set_title('11.3 MeV beam, det ' + str(det) + '  (' + str(theta_n) +'$^{\circ}$)')
-        #else:
-        #    ax.set_title('4.8 MeV beam, det ' + str(det) + '  (' + str(theta_n) +'$^{\circ}$)')
-        sm = cm.ScalarMappable(cmap=cm.viridis)
-        sm.set_array(heatmap)
-        plt.colorbar(sm)
-        plt.tight_layout()       
-        plt.show() 
+        mlab.contours3d(x_mesh, y_mesh, z_mesh, interp, method='nearest')
 
 
 if __name__ == '__main__':
