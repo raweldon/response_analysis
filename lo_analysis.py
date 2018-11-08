@@ -1,5 +1,7 @@
 import numpy as np 
-import matplotlib.pyplot as plt 
+import matplotlib
+matplotlib.use('TkAgg') # speeds up 3D rendering
+import pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
 import pandas as pd
@@ -110,7 +112,7 @@ def plot_3d(data1, data2, det, theta_n, beam_11MeV):
     theta2 = data2.theta.values
     phi2 = data2.phi.values
 
-    fig = plt.figure()
+    fig = plt.figure(det)
     ax = fig.add_subplot(111, projection='3d')
     x1, y1, z1 = polar_to_cartesian(theta1, phi1)
     x2, y2, z2 = polar_to_cartesian(theta2, phi2)
@@ -265,25 +267,37 @@ def main(check_tilt, plot_11, plot_4):
     beam_11MeV = True
     for d, det in enumerate(dets):       
         df_b_mapped = map_3d(data_bvert, det, bvert_tilt, b_up, theta_n[d], phi_n[d], beam_11MeV) 
+        df_b_mapped_mirror = map_3d(data_bvert, det, bvert_tilt, np.asarray(((1,0,0), (0,1,0), (0,0,-1))), theta_n[d], phi_n[d], beam_11MeV)
         df_cp_mapped = map_3d(data_cpvert, det, cpvert_tilt, cp_up, theta_n[d], phi_n[d], beam_11MeV)
+        df_cp_mapped_mirror = map_3d(data_cpvert, det, cpvert_tilt, np.asarray(((1,0,0), (0,0,-1), (0,1,0))), theta_n[d], phi_n[d], beam_11MeV)
 
-        ql = np.concatenate([df_b_mapped.ql_mean.values,df_cp_mapped.ql_mean.values])
-        theta = np.concatenate([df_b_mapped.theta.values,df_cp_mapped.theta.values])
-        phi = np.concatenate([df_b_mapped.phi.values,df_cp_mapped.phi.values])
+        ql = np.concatenate([df_b_mapped.ql_mean.values,df_cp_mapped.ql_mean.values, df_b_mapped_mirror.ql_mean.values,df_cp_mapped_mirror.ql_mean.values])
+        theta = np.concatenate([df_b_mapped.theta.values,df_cp_mapped.theta.values, df_b_mapped_mirror.theta.values,df_cp_mapped_mirror.theta.values])
+        phi = np.concatenate([df_b_mapped.phi.values,df_cp_mapped.phi.values, df_b_mapped_mirror.phi.values,df_cp_mapped_mirror.phi.values])
         # make grid
-        X = np.arange(-1, 1.01, 0.01)
-        Y = np.arange(-1, 1.01, 0.01)
-        Z = np.arange(-1, 1.01, 0.01)
-        #X, Y, Z = np.meshgrid(X, Y, Z)
+        step = 0.01
+        u = np.linspace(theta.min(), theta.max(), len(ql)) # theta
+        v = np.linspace(phi.min(), phi.max(), len(ql)) # phi
+        X = np.outer(np.cos(v), np.sin(u))
+        Y = np.outer(np.sin(v), np.sin(u))
+        Z = np.outer(np.ones(np.size(v)), np.cos(u))        
+        print len(X), len(ql)
         x, y, z = polar_to_cartesian(theta, phi)
-
-        interp = griddata((x, y, z), ql, (X, Y, Z), method='linear')
         
+        # scale ql between 0, 1
+        ql = (ql - min(ql))/(max(ql) - min(ql))
+        print max(ql), min(ql)
+
+        ql_interp = griddata((x, y, z), ql, (X, Y, Z), method='nearest')
+        print ql_interp
+        heatmap = cm.ScalarMappable(cmap='viridis').to_rgba(ql_interp)
+
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
 
         #ax.scatter(x, y, z, c=ql, cmap=plt.hot(), zorder=100)
-        ax.plot_surface(X, Y, Z, facecolors=cm.hot(ql/ql.max()))
+        ax.scatter(x, y, z, c='k', zorder=10)
+        #ax.plot_surface(X, Y, Z, cstride=1, rstride=1, facecolors=heatmap, alpha=1.0, zorder=0)
         ax.set_xlim([-1.1,1.1])
         ax.set_ylim([-1.1,1.1])
         ax.set_zlim([-1.1,1.1])
@@ -295,6 +309,9 @@ def main(check_tilt, plot_11, plot_4):
         #    ax.set_title('11.3 MeV beam, det ' + str(det) + '  (' + str(theta_n) +'$^{\circ}$)')
         #else:
         #    ax.set_title('4.8 MeV beam, det ' + str(det) + '  (' + str(theta_n) +'$^{\circ}$)')
+        sm = cm.ScalarMappable(cmap=cm.viridis)
+        sm.set_array(heatmap)
+        plt.colorbar(sm)
         plt.tight_layout()       
         plt.show() 
 
