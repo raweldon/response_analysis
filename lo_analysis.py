@@ -275,14 +275,20 @@ def main(check_tilt, plot_11, plot_4):
         theta = np.concatenate([df_b_mapped.theta.values,df_cp_mapped.theta.values, df_b_mapped_mirror.theta.values,df_cp_mapped_mirror.theta.values])
         phi = np.concatenate([df_b_mapped.phi.values,df_cp_mapped.phi.values, df_b_mapped_mirror.phi.values,df_cp_mapped_mirror.phi.values])
 
-        theta_mesh, phi_mesh = np.mgrid[min(theta):max(theta):len(ql)+1, min(phi):max(phi):len(ql)+1]
-        x_mesh, y_mesh, z_mesh = polar_to_cartesian(theta_mesh, phi_mesh)
+        theta_mesh, phi_mesh = np.mgrid[min(theta):max(theta):len(ql)*1j, min(phi):max(phi):len(ql)*1j]
+        print theta_mesh, phi_mesh
+        mesh = polar_to_cartesian(theta_mesh, phi_mesh)
 
         x, y, z = polar_to_cartesian(theta, phi)
 
-        interp = griddata((x, y, z), ql, (x_mesh, y_mesh, z_mesh))
+        #interp = griddata((x, y, z), ql, (x_mesh, y_mesh, z_mesh), method='nearest')
 
-        mlab.contours3d(x_mesh, y_mesh, z_mesh, interp, method='nearest')
+        #print interp
+
+        mlab.figure()
+        #mlab.points3d(x, y, z, color=(0,0,0), scale_factor=0.05)
+        mlab.contour3d(mesh)
+        mlab.show()
 
 
 if __name__ == '__main__':
