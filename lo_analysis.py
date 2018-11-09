@@ -266,6 +266,7 @@ def main(check_tilt, plot_11, plot_4):
 
     beam_11MeV = True
     for d, det in enumerate(dets):       
+        print 'det_no =', det, 'theta_n =', theta_n[d]
         df_b_mapped = map_3d(data_bvert, det, bvert_tilt, b_up, theta_n[d], phi_n[d], beam_11MeV) 
         df_b_mapped_mirror = map_3d(data_bvert, det, bvert_tilt, np.asarray(((1,0,0), (0,1,0), (0,0,-1))), theta_n[d], phi_n[d], beam_11MeV)
         df_cp_mapped = map_3d(data_cpvert, det, cpvert_tilt, cp_up, theta_n[d], phi_n[d], beam_11MeV)
@@ -276,20 +277,34 @@ def main(check_tilt, plot_11, plot_4):
         phi = np.concatenate([df_b_mapped.phi.values,df_cp_mapped.phi.values, df_b_mapped_mirror.phi.values,df_cp_mapped_mirror.phi.values])
 
         theta_mesh, phi_mesh = np.mgrid[min(theta):max(theta):len(ql)*1j, min(phi):max(phi):len(ql)*1j]
-        print theta_mesh, phi_mesh
-        mesh = polar_to_cartesian(theta_mesh, phi_mesh)
+        #print theta_mesh, phi_mesh
+        x_mesh, y_mesh, z_mesh = polar_to_cartesian(theta_mesh, phi_mesh)
 
         x, y, z = polar_to_cartesian(theta, phi)
 
-        #interp = griddata((x, y, z), ql, (x_mesh, y_mesh, z_mesh), method='nearest')
+        interp = griddata((x, y, z), ql, (x_mesh, y_mesh, z_mesh), method='nearest')
 
-        #print interp
+        #print len(interp)
 
         mlab.figure()
-        #mlab.points3d(x, y, z, color=(0,0,0), scale_factor=0.05)
-        mlab.contour3d(mesh)
+        pts = mlab.points3d(x, y, z, ql, color=(0,0,0), scale_mode='none', scale_factor=0.05)
+        mesh = mlab.pipeline.delaunay3d(pts)
+        surf = mlab.pipeline.surface(mesh)
+        mlab.xlabel('a')
+        mlab.ylabel('b')
+        mlab.zlabel('c\'')
+        mlab.colorbar()
         mlab.show()
 
+        # contour plot - 3d projection not correct
+        #mlab.figure()
+        #pts = mlab.points3d(x, y, z, ql, scale_mode='none', scale_factor=0.05)
+        #mlab.contour3d(interp, contours=100)
+        #mlab.xlabel('a')
+        #mlab.ylabel('b')
+        #mlab.zlabel('c\'')
+        #mlab.colorbar()
+        #mlab.show()
 
 if __name__ == '__main__':
     plot_11 = False
