@@ -9,7 +9,7 @@ import time
 import os
 from mayavi import mlab
 import pylab as plt
-from scipy.interpolate import griddata, Rbf
+from scipy.interpolate import griddata, Rbf, LinearNDInterpolator, RectSphereBivariateSpline
 from scipy.spatial import Delaunay
 
 def pd_load(filename, p_dir):
@@ -278,51 +278,67 @@ def main(check_tilt, plot_11, plot_4):
         theta = np.concatenate([df_b_mapped.theta.values,df_cp_mapped.theta.values, df_b_mapped_mirror.theta.values,df_cp_mapped_mirror.theta.values])
         phi = np.concatenate([df_b_mapped.phi.values,df_cp_mapped.phi.values, df_b_mapped_mirror.phi.values,df_cp_mapped_mirror.phi.values])
 
-        #theta_mesh, phi_mesh = np.mgrid[min(theta):max(theta):100j, min(phi):max(phi):100j]
-        theta_mesh, phi_mesh = np.meshgrid(np.linspace(0, np.pi, 20), np.linspace(0, 2*np.pi, 20))
-        #print theta_mesh, phi_mesh
-        x_mesh, y_mesh, z_mesh = polar_to_cartesian(theta_mesh, phi_mesh)
-
         x, y, z = polar_to_cartesian(theta, phi)
+
+        # remove repeated points
         xyz = np.array(zip(x,y,z))
         xyz, indices = np.unique(xyz, axis=0, return_index=True)
         ql = ql[indices]
+        theta = theta[indices]
+        phi = phi[indices]
         x, y, z = xyz.T
         
+        #theta_mesh, phi_mesh = np.mgrid[min(theta):max(theta):100j, min(phi):max(phi):100j]
+        theta_mesh, phi_mesh = np.meshgrid(np.linspace(0, np.pi, 1000), np.linspace(0, 2*np.pi, 1000))
+        #print theta_mesh, phi_mesh
+        x_mesh, y_mesh, z_mesh = polar_to_cartesian(theta_mesh, phi_mesh)
+      
+        # griddata
+        interp = griddata((x, y, z), ql, (x_mesh, y_mesh, z_mesh), method='nearest')
 
-        #interp = griddata((x, y, z), ql, (x_mesh, y_mesh, z_mesh), method='linear')
-        rbf_in = Rbf(x, y, z, ql, function='linear')
-        interp = rbf_in(x_mesh, y_mesh, z_mesh)
+        # rbf - only works if points are evenly distribuited
+        #rbf_in = Rbf(x, y, z, ql, function='linear')
+        #interp = rbf_in(x_mesh, y_mesh, z_mesh)
+
+        # LinearNDInterpolator (appears to be the same as griddata)
+        #lin_interp = LinearNDInterpolator((x,y,z), ql)
+        #interp = lin_interp(x_mesh, y_mesh, z_mesh)
+
+        # RectSphereBivariateSpline - doesn't work, data must be in ascending order
+        #r = np.ones((2,len(theta)))
+        #print theta.shape, r.shape
+        #interp = RectSphereBivariateSpline(theta, phi, r)
 
         #print interp
         #print np.sum(np.isfinite(interp))
 
-        #mlab.figure()
-        #pts = mlab.points3d(x, y, z, ql, color=(0,0,0), scale_mode='none', scale_factor=0.05)
-        #mesh = mlab.pipeline.delaunay3d(pts)
-        #surf = mlab.pipeline.surface(mesh)
-        #mlab.xlabel('a')
-        #mlab.ylabel('b')
-        #mlab.zlabel('c\'')
-        #mlab.colorbar()
-        #mlab.show()
+        # points3d with delaunay filter - - works best!!
+        mlab.figure() 
+        pts = mlab.points3d(x, y, z, ql, color=(128./256,128./256,128./256), scale_mode='none', scale_factor=0.05)
+        tri = mlab.pipeline.delaunay3d(pts)
+        tri_smooth = mlab.pipeline.poly_data_normals(tri) # smooths delaunay triangulation mesh
+        surf = mlab.pipeline.surface(tri_smooth, colormap='viridis')
+        mlab.axes(pts, xlabel='a', ylabel='b', zlabel='c\'')
+        mlab.colorbar(surf, orientation='vertical')
+        #mlab#.show()
 
-        # mesh plot
+        # mesh plot - works, use with griddata
         mlab.figure()
         mlab.points3d(x, y, z, ql, color=(128./256,128./256,128./256), scale_mode='none', scale_factor=0.05)
-        pts = mlab.mesh(x_mesh, y_mesh, z_mesh, scalars=interp)
-        mlab.xlabel('a')
-        mlab.ylabel('b')
-        mlab.zlabel('c\'')
-        mlab.colorbar()
-        mlab.show()       
+        mesh = mlab.mesh(x_mesh, y_mesh, z_mesh, scalars=interp, colormap='viridis')
+        mesh = mlab.pipeline.poly_data_normals(mesh)
+        mlab.axes(mesh, xlabel='a', ylabel='b', zlabel='c\'')
+        mlab.colorbar(mesh, orientation='vertical')
+        #mlab.show()       
 
-        # scipy delaunay implementation
-        #d_mesh = Delaunay(np.array([x,y,z]).T)
-        #print d_mesh.simplices.shape
-        #mlab.figure()
-        #mlab.triangular_mesh(x, y, z, d_mesh.simplices, scalars=ql, colormap='jet')
-        #mlab.show()
+        # scipy delaunay implementation - kind of working, look best but issues with full rendering
+        d_mesh = Delaunay(np.array([theta,phi]).T)#, incremental=True, qhull_options='QJ')
+        mlab.figure()
+        mlab.points3d(x, y, z, ql, color=(128./256,128./256,128./256), scale_mode='none', scale_factor=0.05)
+        trimesh = mlab.triangular_mesh(x, y, z, d_mesh.simplices, scalars=ql, colormap='viridis')
+        mlab.axes(trimesh, xlabel='a', ylabel='b', zlabel='c\'')
+        mlab.colorbar(trimesh, orientation='vertical')
+        mlab.show()
 
         # contour plot - 3d projection not correct
         #mlab.figure()
