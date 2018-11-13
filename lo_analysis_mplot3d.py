@@ -1,5 +1,6 @@
-import pyface.qt  # must import first to use mayavi
 import numpy as np 
+import matplotlib
+matplotlib.use('TkAgg') # speeds up 3D rendering
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
@@ -7,10 +8,7 @@ import pandas as pd
 import re
 import time
 import os
-from mayavi import mlab
-import pylab as plt
-from scipy.interpolate import griddata, Rbf
-from scipy.spatial import Delaunay
+from scipy.interpolate import griddata
 
 def pd_load(filename, p_dir):
     # converts pickled data into pandas DataFrame
@@ -268,7 +266,6 @@ def main(check_tilt, plot_11, plot_4):
 
     beam_11MeV = True
     for d, det in enumerate(dets):       
-        print 'det_no =', det, 'theta_n =', theta_n[d]
         df_b_mapped = map_3d(data_bvert, det, bvert_tilt, b_up, theta_n[d], phi_n[d], beam_11MeV) 
         df_b_mapped_mirror = map_3d(data_bvert, det, bvert_tilt, np.asarray(((1,0,0), (0,1,0), (0,0,-1))), theta_n[d], phi_n[d], beam_11MeV)
         df_cp_mapped = map_3d(data_cpvert, det, cpvert_tilt, cp_up, theta_n[d], phi_n[d], beam_11MeV)
@@ -277,62 +274,47 @@ def main(check_tilt, plot_11, plot_4):
         ql = np.concatenate([df_b_mapped.ql_mean.values,df_cp_mapped.ql_mean.values, df_b_mapped_mirror.ql_mean.values,df_cp_mapped_mirror.ql_mean.values])
         theta = np.concatenate([df_b_mapped.theta.values,df_cp_mapped.theta.values, df_b_mapped_mirror.theta.values,df_cp_mapped_mirror.theta.values])
         phi = np.concatenate([df_b_mapped.phi.values,df_cp_mapped.phi.values, df_b_mapped_mirror.phi.values,df_cp_mapped_mirror.phi.values])
-
-        #theta_mesh, phi_mesh = np.mgrid[min(theta):max(theta):100j, min(phi):max(phi):100j]
-        theta_mesh, phi_mesh = np.meshgrid(np.linspace(0, np.pi, 20), np.linspace(0, 2*np.pi, 20))
-        #print theta_mesh, phi_mesh
-        x_mesh, y_mesh, z_mesh = polar_to_cartesian(theta_mesh, phi_mesh)
-
+        # make grid
+        step = 0.01
+        u = np.linspace(theta.min(), theta.max(), len(ql)) # theta
+        v = np.linspace(phi.min(), phi.max(), len(ql)) # phi
+        X = np.outer(np.cos(v), np.sin(u))
+        Y = np.outer(np.sin(v), np.sin(u))
+        Z = np.outer(np.ones(np.size(v)), np.cos(u))        
+        print len(X), len(ql)
         x, y, z = polar_to_cartesian(theta, phi)
-        xyz = np.array(zip(x,y,z))
-        xyz, indices = np.unique(xyz, axis=0, return_index=True)
-        ql = ql[indices]
-        x, y, z = xyz.T
         
+        # scale ql between 0, 1
+        ql = (ql - min(ql))/(max(ql) - min(ql))
+        print max(ql), min(ql)
 
-        #interp = griddata((x, y, z), ql, (x_mesh, y_mesh, z_mesh), method='linear')
-        rbf_in = Rbf(x, y, z, ql, function='linear')
-        interp = rbf_in(x_mesh, y_mesh, z_mesh)
+        ql_interp = griddata((x, y, z), ql, (X, Y, Z), method='nearest')
+        print ql_interp
+        heatmap = cm.ScalarMappable(cmap='viridis').to_rgba(ql_interp)
 
-        #print interp
-        #print np.sum(np.isfinite(interp))
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
 
-        #mlab.figure()
-        #pts = mlab.points3d(x, y, z, ql, color=(0,0,0), scale_mode='none', scale_factor=0.05)
-        #mesh = mlab.pipeline.delaunay3d(pts)
-        #surf = mlab.pipeline.surface(mesh)
-        #mlab.xlabel('a')
-        #mlab.ylabel('b')
-        #mlab.zlabel('c\'')
-        #mlab.colorbar()
-        #mlab.show()
+        #ax.scatter(x, y, z, c=ql, cmap=plt.hot(), zorder=100)
+        ax.scatter(x, y, z, c='k', zorder=10)
+        ax.plot_surface(X, Y, Z, alpha=1.0, zorder=0)
+        ax.set_xlim([-1.1,1.1])
+        ax.set_ylim([-1.1,1.1])
+        ax.set_zlim([-1.1,1.1])
+        ax.set_xlabel('a')
+        ax.set_ylabel('b')
+        ax.set_zlabel('c\'')
+        ax.set_aspect('equal')
+        #if beam_11MeV:
+        #    ax.set_title('11.3 MeV beam, det ' + str(det) + '  (' + str(theta_n) +'$^{\circ}$)')
+        #else:
+        #    ax.set_title('4.8 MeV beam, det ' + str(det) + '  (' + str(theta_n) +'$^{\circ}$)')
+        sm = cm.ScalarMappable(cmap=cm.viridis)
+        sm.set_array(heatmap)
+        plt.colorbar(sm)
+        plt.tight_layout()       
+        plt.show() 
 
-        # mesh plot
-        mlab.figure()
-        mlab.points3d(x, y, z, ql, color=(128./256,128./256,128./256), scale_mode='none', scale_factor=0.05)
-        pts = mlab.mesh(x_mesh, y_mesh, z_mesh, scalars=interp)
-        mlab.xlabel('a')
-        mlab.ylabel('b')
-        mlab.zlabel('c\'')
-        mlab.colorbar()
-        mlab.show()       
-
-        # scipy delaunay implementation
-        #d_mesh = Delaunay(np.array([x,y,z]).T)
-        #print d_mesh.simplices.shape
-        #mlab.figure()
-        #mlab.triangular_mesh(x, y, z, d_mesh.simplices, scalars=ql, colormap='jet')
-        #mlab.show()
-
-        # contour plot - 3d projection not correct
-        #mlab.figure()
-        #pts = mlab.points3d(x, y, z, ql, scale_mode='none', scale_factor=0.05)
-        #mlab.contour3d(x_mesh, y_mesh, z_mesh, interp, contours=100)
-        #mlab.xlabel('a')
-        #mlab.ylabel('b')
-        #mlab.zlabel('c\'')
-        #mlab.colorbar()
-        #mlab.show()
 
 if __name__ == '__main__':
     plot_11 = False
