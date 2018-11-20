@@ -11,6 +11,7 @@ from mayavi import mlab
 import pylab as plt
 from scipy.interpolate import griddata, Rbf, LinearNDInterpolator, RectSphereBivariateSpline
 from scipy.spatial import Delaunay
+import lmfit
 
 def pd_load(filename, p_dir):
     # converts pickled data into pandas DataFrame
@@ -72,19 +73,39 @@ def order_by_rot(data, beam_11MeV):
     data = data.sort_values('rot_order')
     return data, angles
 
+def sin_func(x, a, b, phi):
+    w = 2 # period is 2
+    return a*np.sin(w*(x + phi)) + b
+
+def fit_tilt_data(data, angles, print_report):
+        # sinusoid fit with lmfit
+        angles = [np.deg2rad(x) for x in angles]
+        gmodel = lmfit.Model(sin_func)
+        params = gmodel.make_params(a=1, b=0.1, phi=0)
+        res = gmodel.fit(data, params=params, x=angles, nan_policy='omit')
+        if print_report:
+            print '\n', lmfit.fit_report(res)
+        return res
+
 def tilt_check(det_data, dets, tilts, beam_11MeV):
     # check lo for a given det and tilt
-    fig_no = [1, 2, 3,4 , 5, 6, 6, 5, 4, 3, 2, 1]
+    fig_no = [1, 2, 3, 4, 5, 6, 6, 5, 4, 3, 2, 1]
     color = ['r', 'r', 'r', 'r', 'r', 'r', 'b', 'b', 'b', 'b', 'b', 'b']
  
     for tilt in tilts:
         print '\n'
         tilt_df = det_data.loc[(det_data.tilt == str(tilt))]
+
         for d, det in enumerate(dets):
-            #print tilt, det
             det_df = tilt_df[(tilt_df.det_no == str(det))]
-            
             det_df, angles = order_by_rot(det_df, beam_11MeV)
+
+            # fit
+            res = fit_tilt_data(det_df.ql_mean.values, angles, print_report=True)
+            pars = res.best_values
+            x_vals = np.linspace(0, 200, 100)
+            x_vals_rad = np.deg2rad(x_vals)
+            y_vals = sin_func(x_vals_rad, pars['a'], pars['b'], pars['phi'])
 
             # plot same det angles together
             plt.figure(fig_no[d])
@@ -92,7 +113,9 @@ def tilt_check(det_data, dets, tilts, beam_11MeV):
                          markeredgecolor='k', markeredgewidth=1, markersize=10, capsize=1, label='det ' + str(det))
             for rot, ang, t in zip(det_df.rotation, angles, det_df.ql_mean):
                 plt.annotate( str(rot) + '$^{\circ}$', xy=(ang, t), xytext=(-3, 10), textcoords='offset points')
-            plt.xlim(-5, 185)
+
+            plt.plot(x_vals, y_vals, '--', color=color[d])
+            plt.xlim(-5, max(angles)+5)
             plt.ylabel('light output (MeVee)')
             plt.xlabel('rotation angle (degree)')
             name = det_df.filename.iloc[0].split('.')[0]
@@ -137,14 +160,14 @@ def plot_3d(data1, data2, det, theta_n, beam_11MeV):
     plt.legend()
 
 def crystal_basis_vectors(theta,axis_up):
-    ''' Rotation is counterclockwise about the a-axis (x-axis).
-    '''    
+    # Rotation is counterclockwise about the a-axis (x-axis)
     theta = np.deg2rad(theta)
     rot_matix_x = np.asarray(((1,0,0),(0,np.cos(theta),np.sin(theta)),(0,-np.sin(theta),np.cos(theta))))
     rotated_axes = np.transpose(np.dot(rot_matix_x,np.transpose(axis_up)))  
     return rotated_axes
 
 def map_3d(data, det, tilts, crystal_orientation, theta_neutron, phi_neutron, beam_11MeV):
+    # calculates proton recoil trajectory in correct frame using crystal tilt and neutron scatter angles 
 
     det_df = data.loc[(data.det_no == str(det))]
     dfs=[]
@@ -250,7 +273,8 @@ def plot_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_
         #            a   b  c'  nice 
         azimuth =   [0,  90, 0, 25]
         elevation = [90, 90, 0, 75]
-        for az, el in zip(azimuth, elevation):
+        names = ['40deg_11MeV_a', '40deg_11MeV_b', '40deg_11MeV_c\'', '40deg_11MeV_nice']
+        for i, (az, el) in enumerate(zip(azimuth, elevation)):
             fig = mlab.figure(size=(400*2, 350*2)) 
             pts = mlab.points3d(x, y, z, ql, color=(128./256,128./256,128./256), scale_mode='none', scale_factor=0.05)
             tri = mlab.pipeline.delaunay3d(pts)
@@ -258,7 +282,14 @@ def plot_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_
             surf = mlab.pipeline.surface(tri_smooth, colormap='viridis')
             mlab.axes(pts, xlabel='a', ylabel='b', zlabel='c\'')
             mlab.colorbar(surf, orientation='vertical') 
-            mlab.view(azimuth=az, elevation=el, distance=9, figure=fig)
+            mlab.view(azimuth=az, elevation=el, distance=7.5, figure=fig)
+            #if theta_n[d] == 40:
+            #    print theta_n[d], names[i]
+            #    mlab.savefig(names[i] + '.png')
+            #    print names[i] + '.png saved'
+            #mlab.clf()
+            #mlab.close()
+            
         mlab.show()
 
         # scipy delaunay implementation - kind of working, look best but issues with full rendering
@@ -274,6 +305,7 @@ def main(check_tilt, scatter_11, scatter_4, heatmap_11, heatmap_4):
     cwd = os.getcwd()
     p_dir = cwd + '/pickles/'
     fin = ['bvert_11MeV.p', 'cpvert_11MeV.p', 'bvert_4MeV.p', 'cpvert_4MeV.p']
+    fin = ['bvert_4MeV.p', 'cpvert_4MeV.p']
     dets = [4, 5, 6 ,7 ,8 ,9, 10, 11, 12, 13, 14, 15]
 
     # check individual tilt anlges
@@ -294,17 +326,16 @@ def main(check_tilt, scatter_11, scatter_4, heatmap_11, heatmap_4):
             tilt_check(data, dets, tilts, beam_11MeV)
     
     # 3d plotting
-    ## scatter plots
     theta_n = [70, 60, 50, 40, 30, 20, 20, 30, 40, 50, 60, 70]
     phi_n = [180, 180, 180, 180, 180, 180, 180, 0, 0, 0, 0, 0]
     bvert_tilt = [0, 45, -45, 30, -30, 15, -15]
     cpvert_tilt = [0, 30, -30, 15, -15]
 
-    # crystal orientations ((a_x, a_y, a_z),(b_x, b_y, b_z),(c'_x, c'_y, c'_z))
+    ## crystal orientations ((a_x, a_y, a_z),(b_x, b_y, b_z),(c'_x, c'_y, c'_z))
     b_up = np.asarray(((-1,0,0), (0,-1,0), (0,0,1)))
     cp_up = np.asarray(((-1,0,0), (0,0,1), (0,-1,0)))
 
-    # use to check orientations
+    ## use to check orientations
     if scatter_11:
         scatter_check_3d(fin[0], fin[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, beam_11MeV=True)
     if scatter_4:
@@ -321,11 +352,11 @@ if __name__ == '__main__':
     scatter_11 = False
     scatter_4 = False
 
+    # check lo for a specific tilt (sinusoids)
+    check_tilt = True
+
     # plot heatmaps
     heatmap_11 = False
-    heatmap_4 = True
-
-    # check lo for a specific tilt (sinusoids)
-    check_tilt = False
+    heatmap_4 = False
     
     main(check_tilt, scatter_11, scatter_4, heatmap_11, heatmap_4)
