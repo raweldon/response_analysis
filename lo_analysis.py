@@ -1,3 +1,14 @@
+''' Main functions:
+        tilt_check 
+            - use to plot measured data for each tilt angle
+            - data is fit with sinusoids
+        scatter_check
+            - scatter plot of measured data in 3d
+            - points are colored according to the crystal measured (bvert or cpvert)
+        plot_heatmaps
+            - 3d heatmap plots
+            - use delaunay triagulation for interpolation/extrapolation
+'''
 import pyface.qt  # must import first to use mayavi
 import numpy as np 
 import matplotlib.pyplot as plt
@@ -101,7 +112,7 @@ def tilt_check(det_data, dets, tilts, beam_11MeV):
             det_df, angles = order_by_rot(det_df, beam_11MeV)
 
             # fit
-            res = fit_tilt_data(det_df.ql_mean.values, angles, print_report=True)
+            res = fit_tilt_data(det_df.ql_mean.values, angles, print_report=False)
             pars = res.best_values
             x_vals = np.linspace(0, 200, 100)
             x_vals_rad = np.deg2rad(x_vals)
@@ -322,7 +333,6 @@ def main(check_tilt, scatter_11, scatter_4, heatmap_11, heatmap_4):
 
             data = pd_load(f, p_dir)
             data = split_filenames(data)
-
             tilt_check(data, dets, tilts, beam_11MeV)
     
     # 3d plotting

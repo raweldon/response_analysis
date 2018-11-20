@@ -7,4 +7,8 @@
 
 * 11/14/2018
     * combined all pickles into an excel sheet (pickels.xlsx)
-    * use this sheet to check good and bad data points
+    * use this sheet to check good and bad data points     
+
+* 11/20/2018
+    * added sinusoidal fit to tilt data
+     
