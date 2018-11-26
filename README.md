@@ -11,4 +11,6 @@
 
 * 11/20/2018
     * added sinusoidal fit to tilt data
-     
+
+* 11/26/2018
+    * added 3d plot of sinusoidal fit

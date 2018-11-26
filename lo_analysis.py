@@ -23,6 +23,7 @@ import pylab as plt
 from scipy.interpolate import griddata, Rbf, LinearNDInterpolator, RectSphereBivariateSpline
 from scipy.spatial import Delaunay
 import lmfit
+import pickle
 
 def pd_load(filename, p_dir):
     # converts pickled data into pandas DataFrame
@@ -98,11 +99,16 @@ def fit_tilt_data(data, angles, print_report):
             print '\n', lmfit.fit_report(res)
         return res
 
-def tilt_check(det_data, dets, tilts, beam_11MeV):
-    # check lo for a given det and tilt
+def tilt_check(det_data, dets, tilts, pickle_name, p_dir, beam_11MeV, show_plots, save_pickle):
+    ''' Use to check lo for a given det and tilt
+        Data is fitted with sinusoids
+        Sinusoid fit parameters can be saved for later use by setting save_pickle=True
+    '''
     fig_no = [1, 2, 3, 4, 5, 6, 6, 5, 4, 3, 2, 1]
     color = ['r', 'r', 'r', 'r', 'r', 'r', 'b', 'b', 'b', 'b', 'b', 'b']
- 
+
+    sin_params = []
+    sin_params.append(['tilt', 'det', 'a', 'b', 'phi'])
     for tilt in tilts:
         print '\n'
         tilt_df = det_data.loc[(det_data.tilt == str(tilt))]
@@ -117,23 +123,31 @@ def tilt_check(det_data, dets, tilts, beam_11MeV):
             x_vals = np.linspace(0, 200, 100)
             x_vals_rad = np.deg2rad(x_vals)
             y_vals = sin_func(x_vals_rad, pars['a'], pars['b'], pars['phi'])
+            sin_params.append([tilt, det, pars['a'], pars['b'], pars['phi']])
 
             # plot same det angles together
-            plt.figure(fig_no[d])
-            plt.errorbar(angles, det_df.ql_mean, yerr=det_df.ql_abs_uncert.values, ecolor='black', markerfacecolor=color[d], fmt='o', 
-                         markeredgecolor='k', markeredgewidth=1, markersize=10, capsize=1, label='det ' + str(det))
-            for rot, ang, t in zip(det_df.rotation, angles, det_df.ql_mean):
-                plt.annotate( str(rot) + '$^{\circ}$', xy=(ang, t), xytext=(-3, 10), textcoords='offset points')
+            if show_plots:
+                plt.figure(fig_no[d])
+                plt.errorbar(angles, det_df.ql_mean, yerr=det_df.ql_abs_uncert.values, ecolor='black', markerfacecolor=color[d], fmt='o', 
+                            markeredgecolor='k', markeredgewidth=1, markersize=10, capsize=1, label='det ' + str(det))
+                for rot, ang, t in zip(det_df.rotation, angles, det_df.ql_mean):
+                    plt.annotate( str(rot) + '$^{\circ}$', xy=(ang, t), xytext=(-3, 10), textcoords='offset points')
 
-            plt.plot(x_vals, y_vals, '--', color=color[d])
-            plt.xlim(-5, max(angles)+5)
-            plt.ylabel('light output (MeVee)')
-            plt.xlabel('rotation angle (degree)')
-            name = det_df.filename.iloc[0].split('.')[0]
-            print name
-            plt.title(name)
-            plt.legend()
+                plt.plot(x_vals, y_vals, '--', color=color[d])
+                plt.xlim(-5, max(angles)+5)
+                plt.ylabel('light output (MeVee)')
+                plt.xlabel('rotation angle (degree)')
+                name = det_df.filename.iloc[0].split('.')[0]
+                print name
+                plt.title(name)
+                plt.legend()
         plt.show()
+
+    # save sinusoid fit to pickle
+    if save_pickle:
+        name = pickle_name.split('.')[0]
+        pickle.dump( sin_params, open( p_dir + name + '_sin_params.p', "wb" ) )
+        print 'pickle saved to ' + p_dir + name + '_sin_params.p'
 
 def polar_to_cartesian(theta, phi):
     x = np.sin(theta)*np.cos(phi)
@@ -177,7 +191,57 @@ def crystal_basis_vectors(theta,axis_up):
     rotated_axes = np.transpose(np.dot(rot_matix_x,np.transpose(axis_up)))  
     return rotated_axes
 
-def map_3d(data, det, tilts, crystal_orientation, theta_neutron, phi_neutron, beam_11MeV):
+def map_3d(tilt, crystal_orientation, angles, theta_neutron, phi_neutron):
+    # map points to sphere surface using rotation angle (angles), neutron scatter angle, and tilt angle
+
+    basis_vectors = crystal_basis_vectors(tilt, crystal_orientation)
+    thetap, phip = [], []
+    for angle in angles:
+        # code from C:\Users\raweldon\Research\TUNL\crystal_orientation\crystal_orientations_3d_plot_v8.py
+        angle = np.deg2rad(angle)
+        # counterclockwise rotation matrix about y
+        rot_matrix_y = np.asarray(((np.cos(angle), 0, -np.sin(angle)), (0, 1, 0), (np.sin(angle), 0, np.cos(angle))))
+        rot_orientation = np.transpose(np.dot(rot_matrix_y, np.transpose(basis_vectors)))
+    
+        # proton recoil
+        theta_proton = np.deg2rad(90 - theta_neutron) # proton recoils at 90 deg relative to theta
+        phi_proton = np.deg2rad(phi_neutron + 180) # phi_proton will be opposite sign of phi_neutron
+    
+        # cartesian vector    
+        x_p = np.sin(theta_proton)*np.cos(phi_proton)
+        y_p = np.sin(theta_proton)*np.sin(phi_proton)    
+        z_p = np.cos(theta_proton)
+        
+        p_vector = np.asarray((x_p, y_p, z_p))
+        
+        #get theta_p
+        p_vector_dot_cp = np.dot(p_vector,rot_orientation[2]) # a.b=||a||*||b|| cos(theta)
+        theta_p = np.rad2deg(np.arccos(p_vector_dot_cp))
+        
+        # get phi_p
+        vector_proj_ab = p_vector - p_vector_dot_cp*rot_orientation[2] # remove c' to get ab plane projection (scalar proj: a1 = a*cos(theta))
+        vector_proj_ab = vector_proj_ab/np.sqrt(np.dot(vector_proj_ab,vector_proj_ab)) # vector proj: a1^ = (|a^|cos(theta)) b^/|b|
+        vector_proj_dot_a = np.dot(vector_proj_ab,rot_orientation[0])
+        
+        # account for rounding errors on 1.0 and -1.0 (ex: 1.00000002 -> phi_p = nan)
+        if abs(vector_proj_dot_a) > 1.0:
+            if vector_proj_dot_a > 0:
+                vector_proj_dot_a = 1.0
+            else:
+                vector_proj_dot_a = -1.0
+    
+        phi_p = np.rad2deg(np.arccos(vector_proj_dot_a))
+        
+        # check if phi > 180 deg
+        if np.dot(vector_proj_ab, rot_orientation[1]) < 0:
+            phi_p = 360 - phi_p
+
+        thetap.append(np.deg2rad(theta_p))
+        phip.append(np.deg2rad(phi_p)) 
+
+    return thetap, phip   
+
+def map_data_3d(data, det, tilts, crystal_orientation, theta_neutron, phi_neutron, beam_11MeV):
     # calculates proton recoil trajectory in correct frame using crystal tilt and neutron scatter angles 
 
     det_df = data.loc[(data.det_no == str(det))]
@@ -186,50 +250,7 @@ def map_3d(data, det, tilts, crystal_orientation, theta_neutron, phi_neutron, be
         tilt_df = det_df.loc[(data.tilt == str(tilt))]
         tilt_df, angles = order_by_rot(tilt_df, beam_11MeV)
 
-        basis_vectors = crystal_basis_vectors(tilt, crystal_orientation)
-        thetap, phip = [], []
-        for angle in angles:
-            # code from C:\Users\raweldon\Research\TUNL\crystal_orientation\crystal_orientations_3d_plot_v8.py
-            angle = np.deg2rad(angle)
-            # counterclockwise rotation matrix about y
-            rot_matrix_y = np.asarray(((np.cos(angle), 0, -np.sin(angle)), (0, 1, 0), (np.sin(angle), 0, np.cos(angle))))
-            rot_orientation = np.transpose(np.dot(rot_matrix_y, np.transpose(basis_vectors)))
-        
-            # proton recoil
-            theta_proton = np.deg2rad(90 - theta_neutron) # proton recoils at 90 deg relative to theta
-            phi_proton = np.deg2rad(phi_neutron + 180) # phi_proton will be opposite sign of phi_neutron
-        
-            # cartesian vector    
-            x_p = np.sin(theta_proton)*np.cos(phi_proton)
-            y_p = np.sin(theta_proton)*np.sin(phi_proton)    
-            z_p = np.cos(theta_proton)
-            
-            p_vector = np.asarray((x_p, y_p, z_p))
-            
-            #get theta_p
-            p_vector_dot_cp = np.dot(p_vector,rot_orientation[2]) # a.b=||a||*||b|| cos(theta)
-            theta_p = np.rad2deg(np.arccos(p_vector_dot_cp))
-            
-            # get phi_p
-            vector_proj_ab = p_vector - p_vector_dot_cp*rot_orientation[2] # remove c' to get ab plane projection (scalar proj: a1 = a*cos(theta))
-            vector_proj_ab = vector_proj_ab/np.sqrt(np.dot(vector_proj_ab,vector_proj_ab)) # vector proj: a1^ = (|a^|cos(theta)) b^/|b|
-            vector_proj_dot_a = np.dot(vector_proj_ab,rot_orientation[0])
-            
-            # account for rounding errors on 1.0 and -1.0 (ex: 1.00000002 -> phi_p = nan)
-            if abs(vector_proj_dot_a) > 1.0:
-                if vector_proj_dot_a > 0:
-                    vector_proj_dot_a = 1.0
-                else:
-                    vector_proj_dot_a = -1.0
-        
-            phi_p = np.rad2deg(np.arccos(vector_proj_dot_a))
-            
-            # check if phi > 180 deg
-            if np.dot(vector_proj_ab, rot_orientation[1]) < 0:
-                phi_p = 360 - phi_p
-
-            thetap.append(np.deg2rad(theta_p))
-            phip.append(np.deg2rad(phi_p))                 
+        thetap, phip = map_3d(tilt, crystal_orientation, angles, theta_neutron, phi_neutron)       
 
         update_df = tilt_df.assign(phi = phip)
         update_df = update_df.assign(theta = thetap)
@@ -245,8 +266,8 @@ def scatter_check_3d(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, the
     data_cpvert = pd_load(fin2, p_dir)
     data_cpvert = split_filenames(data_cpvert)
     for d, det in enumerate(dets):       
-        df_b_mapped = map_3d(data_bvert, det, bvert_tilt, b_up, theta_n[d], phi_n[d], beam_11MeV) 
-        df_cp_mapped = map_3d(data_cpvert, det, cpvert_tilt, cp_up, theta_n[d], phi_n[d], beam_11MeV)
+        df_b_mapped = map_data_3d(data_bvert, det, bvert_tilt, b_up, theta_n[d], phi_n[d], beam_11MeV) 
+        df_cp_mapped = map_data_3d(data_cpvert, det, cpvert_tilt, cp_up, theta_n[d], phi_n[d], beam_11MeV)
         plot_3d(df_b_mapped, df_cp_mapped, det, theta_n[d], beam_11MeV)
     plt.show()
 
@@ -261,10 +282,10 @@ def plot_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_
 
     for d, det in enumerate(dets):       
         print 'det_no =', det, 'theta_n =', theta_n[d]
-        df_b_mapped = map_3d(data_bvert, det, bvert_tilt, b_up, theta_n[d], phi_n[d], beam_11MeV) 
-        df_b_mapped_mirror = map_3d(data_bvert, det, bvert_tilt, np.asarray(((1,0,0), (0,1,0), (0,0,-1))), theta_n[d], phi_n[d], beam_11MeV)
-        df_cp_mapped = map_3d(data_cpvert, det, cpvert_tilt, cp_up, theta_n[d], phi_n[d], beam_11MeV)
-        df_cp_mapped_mirror = map_3d(data_cpvert, det, cpvert_tilt, np.asarray(((1,0,0), (0,0,-1), (0,1,0))), theta_n[d], phi_n[d], beam_11MeV)
+        df_b_mapped = map_data_3d(data_bvert, det, bvert_tilt, b_up, theta_n[d], phi_n[d], beam_11MeV) 
+        df_b_mapped_mirror = map_data_3d(data_bvert, det, bvert_tilt, np.asarray(((1,0,0), (0,1,0), (0,0,-1))), theta_n[d], phi_n[d], beam_11MeV)
+        df_cp_mapped = map_data_3d(data_cpvert, det, cpvert_tilt, cp_up, theta_n[d], phi_n[d], beam_11MeV)
+        df_cp_mapped_mirror = map_data_3d(data_cpvert, det, cpvert_tilt, np.asarray(((1,0,0), (0,0,-1), (0,1,0))), theta_n[d], phi_n[d], beam_11MeV)
 
         ql = np.concatenate([df_b_mapped.ql_mean.values,df_cp_mapped.ql_mean.values, df_b_mapped_mirror.ql_mean.values,df_cp_mapped_mirror.ql_mean.values])
         theta = np.concatenate([df_b_mapped.theta.values,df_cp_mapped.theta.values, df_b_mapped_mirror.theta.values,df_cp_mapped_mirror.theta.values])
@@ -296,7 +317,7 @@ def plot_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_
             mlab.view(azimuth=az, elevation=el, distance=7.5, figure=fig)
             #if theta_n[d] == 40:
             #    print theta_n[d], names[i]
-            #    mlab.savefig(names[i] + '.png')
+            #    mlab.savefig(cwd + '/' + names[i] + '.png')
             #    print names[i] + '.png saved'
             #mlab.clf()
             #mlab.close()
@@ -312,11 +333,60 @@ def plot_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_
         #mlab.colorbar(trimesh, orientation='vertical')
         #mlab.show()
 
-def main(check_tilt, scatter_11, scatter_4, heatmap_11, heatmap_4):
+def map_fitted_data_3d(data, det, tilts, crystal_orientation, theta_neutron, phi_neutron, beam_11MeV):
+    # 
+    det_df = data.loc[(data.det == det)]
+    ql_all, theta_p, phi_p = [], [], []
+    for t, tilt in enumerate(tilts):
+        tilt_df = det_df.loc[(data.tilt == tilt)]
+        angles = np.linspace(0, 190, 100)
+
+        ql = sin_func(np.deg2rad(angles), tilt_df['a'].values, tilt_df['b'].values, tilt_df['phi'].values)
+        thetap, phip = map_3d(tilt, crystal_orientation, angles, theta_neutron, phi_neutron)       
+        ql_all.extend(ql)
+        theta_p.extend(thetap)
+        phi_p.extend(phip)
+
+    d = {'ql': ql_all, 'theta': theta_p, 'phi': phi_p}
+    df = pd.DataFrame(data=d)
+    return df
+
+def plot_fitted_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV):
+    data_bvert = pd_load(fin1, p_dir)
+    data_cpvert = pd_load(fin2, p_dir)
+
+    for d, det in enumerate(dets):
+        print 'det_no =', det, 'theta_n =', theta_n[d]
+        df_b_mapped = map_fitted_data_3d(data_bvert, det, bvert_tilt, b_up, theta_n[d], phi_n[d], beam_11MeV)
+        df_b_mapped_mirror = map_fitted_data_3d(data_bvert, det, bvert_tilt, np.asarray(((1,0,0), (0,1,0), (0,0,-1))), theta_n[d], phi_n[d], beam_11MeV)
+        df_cp_mapped = map_fitted_data_3d(data_cpvert, det, cpvert_tilt, cp_up, theta_n[d], phi_n[d], beam_11MeV)
+        df_cp_mapped_mirror = map_fitted_data_3d(data_cpvert, det, cpvert_tilt, np.asarray(((1,0,0), (0,0,-1), (0,1,0))), theta_n[d], phi_n[d], beam_11MeV)
+
+        ql = np.concatenate([df_b_mapped.ql.values,df_cp_mapped.ql.values, df_b_mapped_mirror.ql.values,df_cp_mapped_mirror.ql.values])
+        theta = np.concatenate([df_b_mapped.theta.values,df_cp_mapped.theta.values, df_b_mapped_mirror.theta.values,df_cp_mapped_mirror.theta.values])
+        phi = np.concatenate([df_b_mapped.phi.values,df_cp_mapped.phi.values, df_b_mapped_mirror.phi.values,df_cp_mapped_mirror.phi.values])
+        x, y, z = polar_to_cartesian(theta, phi)
+
+        # remove repeated points
+        xyz = np.array(zip(x,y,z))
+        xyz, indices = np.unique(xyz, axis=0, return_index=True)
+        ql = ql[indices]
+        theta = theta[indices]
+        phi = phi[indices]
+        x, y, z = xyz.T
+
+        fig = mlab.figure(size=(400*2, 350*2)) 
+        pts = mlab.points3d(x, y, z, ql, colormap='viridis', scale_mode='none', scale_factor=0.03)
+        mlab.axes(pts, xlabel='a', ylabel='b', zlabel='c\'')
+        mlab.colorbar(pts, orientation='vertical') 
+        mlab.view(azimuth=0, elevation=0, distance=7.5, figure=fig)            
+        mlab.show()        
+
+def main(check_tilt, scatter_11, scatter_4, heatmap_11, heatmap_4, fitted_heatmap_11):
     cwd = os.getcwd()
     p_dir = cwd + '/pickles/'
     fin = ['bvert_11MeV.p', 'cpvert_11MeV.p', 'bvert_4MeV.p', 'cpvert_4MeV.p']
-    fin = ['bvert_4MeV.p', 'cpvert_4MeV.p']
+    #fin = ['bvert_4MeV.p', 'cpvert_4MeV.p']
     dets = [4, 5, 6 ,7 ,8 ,9, 10, 11, 12, 13, 14, 15]
 
     # check individual tilt anlges
@@ -333,11 +403,11 @@ def main(check_tilt, scatter_11, scatter_4, heatmap_11, heatmap_4):
 
             data = pd_load(f, p_dir)
             data = split_filenames(data)
-            tilt_check(data, dets, tilts, beam_11MeV)
+            tilt_check(data, dets, tilts, f, p_dir, beam_11MeV, show_plots=False, save_pickle=True)
     
     # 3d plotting
     theta_n = [70, 60, 50, 40, 30, 20, 20, 30, 40, 50, 60, 70]
-    phi_n = [180, 180, 180, 180, 180, 180, 180, 0, 0, 0, 0, 0]
+    phi_n = [180, 180, 180, 180, 180, 180, 0, 0, 0, 0, 0, 0]
     bvert_tilt = [0, 45, -45, 30, -30, 15, -15]
     cpvert_tilt = [0, 30, -30, 15, -15]
 
@@ -351,11 +421,17 @@ def main(check_tilt, scatter_11, scatter_4, heatmap_11, heatmap_4):
     if scatter_4:
         scatter_check_3d(fin[2], fin[3], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, beam_11MeV=False)
 
-    ## heat maps
+    ## heat maps with data points
     if heatmap_11:
         plot_heatmaps(fin[0], fin[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, beam_11MeV=True)
     if heatmap_4:
         plot_heatmaps(fin[2], fin[3], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, beam_11MeV=False)
+
+    ## heat maps with fitted data
+    sin_fits = ['bvert_11MeV_sin_params.p', 'cpvert_11MeV_sin_params.p', 'bvert_4MeV_sin_params.p', 'cpvert_4MeV_sin_params.p']
+    if fitted_heatmap_11:
+        plot_fitted_heatmaps(sin_fits[0], sin_fits[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True)
+
 
 if __name__ == '__main__':
     # check 3d scatter plots for both crystals
@@ -363,10 +439,13 @@ if __name__ == '__main__':
     scatter_4 = False
 
     # check lo for a specific tilt (sinusoids)
-    check_tilt = True
+    check_tilt = False
 
-    # plot heatmaps
+    # plot heatmaps with data points
     heatmap_11 = False
     heatmap_4 = False
-    
-    main(check_tilt, scatter_11, scatter_4, heatmap_11, heatmap_4)
+
+    # plot heatmaps with fitted data
+    fitted_heatmap_11 = True   
+
+    main(check_tilt, scatter_11, scatter_4, heatmap_11, heatmap_4, fitted_heatmap_11)
