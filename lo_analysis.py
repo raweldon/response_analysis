@@ -27,7 +27,7 @@ import pickle
 
 def pd_load(filename, p_dir):
     # converts pickled data into pandas DataFrame
-    print '\n', p_dir+filename
+    print '\nLoading pickle data from:\n', p_dir+filename
     data = pd.read_pickle(p_dir + filename)
     headers = data.pop(0)
     return pd.DataFrame(data, columns=headers)
@@ -99,13 +99,30 @@ def fit_tilt_data(data, angles, print_report):
             print '\n', lmfit.fit_report(res)
         return res
 
+def get_max_ql_per_det(det_data, dets, tilts):
+    # use to check max_ql values for each tilt per detector (all tilts measure recoils along the a-axis)
+    for det in dets:
+        print '\n-----------\ndet_no ', det, '\n-----------\n'
+        print 'tilt      ql'
+        det_df = det_data.loc[(det_data.det_no == str(det))]
+        for tilt in tilts:
+            tilt_df = det_df.loc[(det_df.tilt == str(tilt))]
+            tilt_df = tilt_df.reset_index()
+            idxmax = tilt_df.ql_mean.idxmax()
+            max_col = tilt_df.iloc[idxmax]
+            print '{:^5} {:>8}'.format(max_col.tilt, max_col.ql_mean)
+
 def tilt_check(det_data, dets, tilts, pickle_name, p_dir, beam_11MeV, show_plots, save_pickle):
     ''' Use to check lo for a given det and tilt
         Data is fitted with sinusoids
         Sinusoid fit parameters can be saved for later use by setting save_pickle=True
     '''
+    get_max_ql_per_det(det_data, dets, tilts)
+ 
     fig_no = [1, 2, 3, 4, 5, 6, 6, 5, 4, 3, 2, 1]
     color = ['r', 'r', 'r', 'r', 'r', 'r', 'b', 'b', 'b', 'b', 'b', 'b']
+    a_axis_dir = [20, 30, 40, 50, 60, 70, 110, 120, 130, 140, 150, 160] # angle for recoils along a-axis (relative)
+    cp_b_axes_dir = [x + 90 for x in a_axis_dir[:6]] + [x - 90 for x in a_axis_dir[6:]] # angles for recoils along c' or b axes
 
     sin_params = []
     sin_params.append(['tilt', 'det', 'a', 'b', 'phi'])
@@ -130,14 +147,23 @@ def tilt_check(det_data, dets, tilts, pickle_name, p_dir, beam_11MeV, show_plots
                 plt.figure(fig_no[d])
                 plt.errorbar(angles, det_df.ql_mean, yerr=det_df.ql_abs_uncert.values, ecolor='black', markerfacecolor=color[d], fmt='o', 
                             markeredgecolor='k', markeredgewidth=1, markersize=10, capsize=1, label='det ' + str(det))
+               
+                # annotate
                 for rot, ang, t in zip(det_df.rotation, angles, det_df.ql_mean):
                     plt.annotate( str(rot) + '$^{\circ}$', xy=(ang, t), xytext=(-3, 10), textcoords='offset points')
-
+               
+                # plot fit
                 plt.plot(x_vals, y_vals, '--', color=color[d])
+                
+                # check a-axis recoils have max ql - 11 and 4 MeV look good
+                name = re.split('\.|_', det_df.filename.iloc[0])  
+                plt.scatter(angles[np.where(angles == a_axis_dir[d])], det_df.ql_mean.iloc[np.where(angles == a_axis_dir[d])], c='k', s=120, zorder=10, label='')
+                plt.scatter(angles[np.where(angles == cp_b_axes_dir[d])], det_df.ql_mean.iloc[np.where(angles == cp_b_axes_dir[d])], c='k', s=120, zorder=10, label='')
+                                   
                 plt.xlim(-5, max(angles)+5)
                 plt.ylabel('light output (MeVee)')
                 plt.xlabel('rotation angle (degree)')
-                name = det_df.filename.iloc[0].split('.')[0]
+                name = name[0] + '_' + name[1] + '_' + name[2] + '_' + name[4]
                 print name
                 plt.title(name)
                 plt.legend()
@@ -149,40 +175,20 @@ def tilt_check(det_data, dets, tilts, pickle_name, p_dir, beam_11MeV, show_plots
         pickle.dump( sin_params, open( p_dir + name + '_sin_params.p', "wb" ) )
         print 'pickle saved to ' + p_dir + name + '_sin_params.p'
 
-def polar_to_cartesian(theta, phi):
-    x = np.sin(theta)*np.cos(phi)
-    y = np.sin(theta)*np.sin(phi)
-    z = np.cos(theta)
-    return x, y , z
-
-def plot_3d(data1, data2, det, theta_n, beam_11MeV):
-    # convert to cartesian
-    theta1 = data1.theta.values
-    phi1 = data1.phi.values
-    theta2 = data2.theta.values
-    phi2 = data2.phi.values
-
-    fig = plt.figure(det)
-    ax = fig.add_subplot(111, projection='3d')
-    x1, y1, z1 = polar_to_cartesian(theta1, phi1)
-    x2, y2, z2 = polar_to_cartesian(theta2, phi2)
-
-    # plot
-    ax.scatter(x1, y1, z1, c='r', label='bvert')
-    ax.scatter(x2, y2, z2, c='b', label='cpvert')
-    ax.set_xlim([-1.1,1.1])
-    ax.set_ylim([-1.1,1.1])
-    ax.set_zlim([-1.1,1.1])
-    ax.set_xlabel('a')
-    ax.set_ylabel('b')
-    ax.set_zlabel('c\'')
-    ax.set_aspect('equal')
-    if beam_11MeV:
-        ax.set_title('11.3 MeV beam, det ' + str(det) + '  (' + str(theta_n) +'$^{\circ}$)')
+def polar_to_cartesian(theta, phi, crystal_orientation, cp_up):
+    # cp_up
+    if np.array_equal(crystal_orientation, cp_up):
+        #print 'Converting to cartesian with cp_up'
+        x = np.sin(theta)*np.cos(phi)
+        y = np.sin(theta)*np.sin(phi)
+        z = np.cos(theta)
+    # b_up
     else:
-        ax.set_title('4.8 MeV beam, det ' + str(det) + '  (' + str(theta_n) +'$^{\circ}$)')
-    plt.tight_layout()
-    plt.legend()
+        #print 'Converting to cartesian with b_up'
+        x = -np.sin(theta)*np.cos(phi)
+        y = -np.sin(theta)*np.sin(phi)
+        z = np.cos(theta)       
+    return x, y , z
 
 def crystal_basis_vectors(theta,axis_up):
     # Rotation is counterclockwise about the a-axis (x-axis)
@@ -204,7 +210,7 @@ def map_3d(tilt, crystal_orientation, angles, theta_neutron, phi_neutron):
         rot_orientation = np.transpose(np.dot(rot_matrix_y, np.transpose(basis_vectors)))
     
         # proton recoil
-        theta_proton = np.deg2rad(90 - theta_neutron) # proton recoils at 90 deg relative to theta
+        theta_proton = np.deg2rad(theta_neutron) # proton recoils at 90 deg relative to theta
         phi_proton = np.deg2rad(phi_neutron + 180) # phi_proton will be opposite sign of phi_neutron
     
         # cartesian vector    
@@ -265,13 +271,40 @@ def scatter_check_3d(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, the
     data_bvert = split_filenames(data_bvert)
     data_cpvert = pd_load(fin2, p_dir)
     data_cpvert = split_filenames(data_cpvert)
+
     for d, det in enumerate(dets):       
         df_b_mapped = map_data_3d(data_bvert, det, bvert_tilt, b_up, theta_n[d], phi_n[d], beam_11MeV) 
         df_cp_mapped = map_data_3d(data_cpvert, det, cpvert_tilt, cp_up, theta_n[d], phi_n[d], beam_11MeV)
-        plot_3d(df_b_mapped, df_cp_mapped, det, theta_n[d], beam_11MeV)
-    plt.show()
+        # convert to cartesian
+        theta1 = df_b_mapped.theta.values
+        phi1 = df_b_mapped.phi.values
+        theta2 = df_cp_mapped.theta.values
+        phi2 = df_cp_mapped.phi.values
 
-def plot_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, beam_11MeV):
+        fig = plt.figure(det)
+        ax = fig.add_subplot(111, projection='3d')
+        x1, y1, z1 = polar_to_cartesian(theta1, phi1, b_up, cp_up)
+        x2, y2, z2 = polar_to_cartesian(theta2, phi2, cp_up, cp_up)
+
+        # plot
+        ax.scatter(x1, y1, z1, c='r', label='bvert')
+        ax.scatter(x2, y2, z2, c='b', label='cpvert')
+        ax.set_xlim([-1.1,1.1])
+        ax.set_ylim([-1.1,1.1])
+        ax.set_zlim([-1.1,1.1])
+        ax.set_xlabel('a')
+        ax.set_ylabel('b')
+        ax.set_zlabel('c\'')
+        ax.set_aspect('equal')
+        if beam_11MeV:
+            ax.set_title('11.3 MeV beam, det ' + str(det) + '  (' + str(theta_n) +'$^{\circ}$)')
+        else:
+            ax.set_title('4.8 MeV beam, det ' + str(det) + '  (' + str(theta_n) +'$^{\circ}$)')
+        plt.tight_layout()
+        plt.legend()
+        plt.show()
+
+def plot_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, beam_11MeV, multiplot):
     ''' Plots the heatmap for a hemishpere of measurements
         Full sphere is made by plotting a mirror image of the hemiphere measurements
     '''
@@ -285,61 +318,92 @@ def plot_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_
         df_b_mapped = map_data_3d(data_bvert, det, bvert_tilt, b_up, theta_n[d], phi_n[d], beam_11MeV) 
         df_b_mapped_mirror = map_data_3d(data_bvert, det, bvert_tilt, np.asarray(((1,0,0), (0,1,0), (0,0,-1))), theta_n[d], phi_n[d], beam_11MeV)
         df_cp_mapped = map_data_3d(data_cpvert, det, cpvert_tilt, cp_up, theta_n[d], phi_n[d], beam_11MeV)
-        df_cp_mapped_mirror = map_data_3d(data_cpvert, det, cpvert_tilt, np.asarray(((1,0,0), (0,0,-1), (0,1,0))), theta_n[d], phi_n[d], beam_11MeV)
+        df_cp_mapped_mirror = map_data_3d(data_cpvert, det, cpvert_tilt, np.asarray(((-1,0,0), (0,0,-1), (0,1,0))), theta_n[d], phi_n[d], beam_11MeV)
 
-        ql = np.concatenate([df_b_mapped.ql_mean.values,df_cp_mapped.ql_mean.values, df_b_mapped_mirror.ql_mean.values,df_cp_mapped_mirror.ql_mean.values])
-        theta = np.concatenate([df_b_mapped.theta.values,df_cp_mapped.theta.values, df_b_mapped_mirror.theta.values,df_cp_mapped_mirror.theta.values])
-        phi = np.concatenate([df_b_mapped.phi.values,df_cp_mapped.phi.values, df_b_mapped_mirror.phi.values,df_cp_mapped_mirror.phi.values])
+        # convert to cartesian
+        theta_b = np.concatenate([df_b_mapped.theta.values, df_b_mapped_mirror.theta.values])
+        theta_cp = np.concatenate([df_cp_mapped.theta.values, df_cp_mapped_mirror.theta.values])
+        phi_b = np.concatenate([df_b_mapped.phi.values, df_b_mapped_mirror.phi.values])
+        phi_cp = np.concatenate([df_cp_mapped.phi.values, df_cp_mapped_mirror.phi.values])
 
-        x, y, z = polar_to_cartesian(theta, phi)
+        x_b, y_b, z_b = polar_to_cartesian(theta_b, phi_b, b_up, cp_up)
+        x_cp, y_cp, z_cp = polar_to_cartesian(theta_cp, phi_cp, cp_up, cp_up)
+
+        x = np.concatenate((x_b, x_cp))
+        y = np.concatenate((y_b, y_cp))
+        z = np.concatenate((z_b, z_cp))
+        ql = np.concatenate([df_b_mapped.ql_mean.values, df_b_mapped_mirror.ql_mean.values, df_cp_mapped.ql_mean.values, df_cp_mapped_mirror.ql_mean.values])
 
         # remove repeated points
         xyz = np.array(zip(x,y,z))
         xyz, indices = np.unique(xyz, axis=0, return_index=True)
         ql = ql[indices]
-        theta = theta[indices]
-        phi = phi[indices]
         x, y, z = xyz.T
 
         # points3d with delaunay filter - works best!!
-        #            a   b  c'  nice 
-        azimuth =   [0,  90, 0, 25]
-        elevation = [90, 90, 0, 75]
-        names = ['40deg_11MeV_a', '40deg_11MeV_b', '40deg_11MeV_c\'', '40deg_11MeV_nice']
-        for i, (az, el) in enumerate(zip(azimuth, elevation)):
+        ## use for nice looking plots
+        if multiplot:
+            #            a   b  c'  nice 
+            azimuth =   [0,  90, 0, 25]
+            elevation = [90, 90, 0, 75]
+            names = ['40deg_11MeV_a', '40deg_11MeV_b', '40deg_11MeV_c\'', '40deg_11MeV_nice']
+            for i, (az, el) in enumerate(zip(azimuth, elevation)):
+                fig = mlab.figure(size=(400*2, 350*2)) 
+                fig.scene.disable_render = True
+                pts = mlab.points3d(x, y, z, ql, color=(128./256,128./256,128./256), scale_mode='none', scale_factor=0.05)
+                tri = mlab.pipeline.delaunay3d(pts)
+                tri_smooth = mlab.pipeline.poly_data_normals(tri) # smooths delaunay triangulation mesh
+                surf = mlab.pipeline.surface(tri_smooth, colormap='viridis')
+                mlab.axes(pts, xlabel='a', ylabel='b', zlabel='c\'')
+                mlab.colorbar(surf, orientation='vertical') 
+                mlab.view(azimuth=az, elevation=el, distance=7.5, figure=fig)
+                #if theta_n[d] == 40:
+                #    print theta_n[d], names[i]
+                #    mlab.savefig(cwd + '/' + names[i] + '.png')
+                #    print names[i] + '.png saved'
+                #mlab.clf()
+                #mlab.close()
+
+                for x_val, y_val, z_val, ql_val in zip(x, y, z, ql):
+                    mlab.text3d(x_val, y_val, z_val, str(ql_val), scale=0.03, color=(0,0,0), figure=fig)
+                fig.scene.disable_render = False
+
+        ## use for analysis 
+        else:
+            max_idx = np.argmax(ql)
+            print '\nql_max = ', ql[max_idx]
+
             fig = mlab.figure(size=(400*2, 350*2)) 
-            pts = mlab.points3d(x, y, z, ql, color=(128./256,128./256,128./256), scale_mode='none', scale_factor=0.05)
+            fig.scene.disable_render = True
+            pts = mlab.points3d(x, y, z, ql, colormap='viridis', scale_mode='none', scale_factor=0.03)
+
+            # plot max ql point (red)
+            mlab.points3d(x[max_idx], y[max_idx], z[max_idx], ql[max_idx], color=(1,0,0), scale_mode='none', scale_factor=0.03)
+            
+            # delaunay triagulation (mesh, interpolation)
             tri = mlab.pipeline.delaunay3d(pts)
             tri_smooth = mlab.pipeline.poly_data_normals(tri) # smooths delaunay triangulation mesh
             surf = mlab.pipeline.surface(tri_smooth, colormap='viridis')
+            
+            # ql vals
+            for x_val, y_val, z_val, ql_val in zip(x, y, z, ql):
+                mlab.text3d(x_val, y_val, z_val, str(ql_val), scale=0.03, color=(0,0,0), figure=fig)
+
             mlab.axes(pts, xlabel='a', ylabel='b', zlabel='c\'')
             mlab.colorbar(surf, orientation='vertical') 
-            mlab.view(azimuth=az, elevation=el, distance=7.5, figure=fig)
-            #if theta_n[d] == 40:
-            #    print theta_n[d], names[i]
-            #    mlab.savefig(cwd + '/' + names[i] + '.png')
-            #    print names[i] + '.png saved'
-            #mlab.clf()
-            #mlab.close()
-            
-        mlab.show()
-
-        # scipy delaunay implementation - kind of working, look best but issues with full rendering
-        #d_mesh = Delaunay(np.array([theta,phi]).T)#, incremental=True, qhull_options='QJ')
-        #mlab.figure()
-        #mlab.points3d(x, y, z, ql, color=(128./256,128./256,128./256), scale_mode='none', scale_factor=0.05)
-        #trimesh = mlab.triangular_mesh(x, y, z, d_mesh.simplices, scalars=ql, colormap='viridis')
-        #mlab.axes(trimesh, xlabel='a', ylabel='b', zlabel='c\'')
-        #mlab.colorbar(trimesh, orientation='vertical')
-        #mlab.show()
+            mlab.view(azimuth=0, elevation=0, distance=7.5, figure=fig)  
+            fig.scene.disable_render = False            
+            mlab.show()
 
 def map_fitted_data_3d(data, det, tilts, crystal_orientation, theta_neutron, phi_neutron, beam_11MeV):
-    # 
+    # like map_data_3d but for fitted data
     det_df = data.loc[(data.det == det)]
     ql_all, theta_p, phi_p = [], [], []
     for t, tilt in enumerate(tilts):
         tilt_df = det_df.loc[(data.tilt == tilt)]
-        angles = np.linspace(0, 190, 100)
+        angles = np.arange(0, 180, 5) # 5 and 2 look good
+
+        #print '{:>4} {:>8} {:>8} {:>8}'.format(tilt, round(tilt_df['a'].values[0], 4), round(tilt_df['b'].values[0], 4), round(tilt_df['phi'].values[0],4))
 
         ql = sin_func(np.deg2rad(angles), tilt_df['a'].values, tilt_df['b'].values, tilt_df['phi'].values)
         thetap, phip = map_3d(tilt, crystal_orientation, angles, theta_neutron, phi_neutron)       
@@ -358,28 +422,44 @@ def plot_fitted_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up,
     for d, det in enumerate(dets):
         print 'det_no =', det, 'theta_n =', theta_n[d]
         df_b_mapped = map_fitted_data_3d(data_bvert, det, bvert_tilt, b_up, theta_n[d], phi_n[d], beam_11MeV)
-        df_b_mapped_mirror = map_fitted_data_3d(data_bvert, det, bvert_tilt, np.asarray(((1,0,0), (0,1,0), (0,0,-1))), theta_n[d], phi_n[d], beam_11MeV)
         df_cp_mapped = map_fitted_data_3d(data_cpvert, det, cpvert_tilt, cp_up, theta_n[d], phi_n[d], beam_11MeV)
-        df_cp_mapped_mirror = map_fitted_data_3d(data_cpvert, det, cpvert_tilt, np.asarray(((1,0,0), (0,0,-1), (0,1,0))), theta_n[d], phi_n[d], beam_11MeV)
+        df_b_mapped_mirror = map_fitted_data_3d(data_bvert, det, bvert_tilt, np.asarray(((1,0,0), (0,1,0), (0,0,-1))), theta_n[d], phi_n[d], beam_11MeV)
+        df_cp_mapped_mirror = map_fitted_data_3d(data_cpvert, det, cpvert_tilt, np.asarray(((-1,0,0), (0,0,-1), (0,1,0))), theta_n[d], phi_n[d], beam_11MeV)
 
-        ql = np.concatenate([df_b_mapped.ql.values,df_cp_mapped.ql.values, df_b_mapped_mirror.ql.values,df_cp_mapped_mirror.ql.values])
-        theta = np.concatenate([df_b_mapped.theta.values,df_cp_mapped.theta.values, df_b_mapped_mirror.theta.values,df_cp_mapped_mirror.theta.values])
-        phi = np.concatenate([df_b_mapped.phi.values,df_cp_mapped.phi.values, df_b_mapped_mirror.phi.values,df_cp_mapped_mirror.phi.values])
-        x, y, z = polar_to_cartesian(theta, phi)
+        # convert to cartesian
+        theta_b = np.concatenate([df_b_mapped.theta.values, df_b_mapped_mirror.theta.values])
+        theta_cp = np.concatenate([df_cp_mapped.theta.values, df_cp_mapped_mirror.theta.values])
+        phi_b = np.concatenate([df_b_mapped.phi.values, df_b_mapped_mirror.phi.values])
+        phi_cp = np.concatenate([df_cp_mapped.phi.values, df_cp_mapped_mirror.phi.values])
+
+        x_b, y_b, z_b = polar_to_cartesian(theta_b, phi_b, b_up, cp_up)
+        x_cp, y_cp, z_cp = polar_to_cartesian(theta_cp, phi_cp, cp_up, cp_up)
+
+        x = np.concatenate((x_b, x_cp))
+        y = np.concatenate((y_b, y_cp))
+        z = np.concatenate((z_b, z_cp))
+        ql = np.concatenate([df_b_mapped.ql.values, df_b_mapped_mirror.ql.values, df_cp_mapped.ql.values, df_cp_mapped_mirror.ql.values])
 
         # remove repeated points
         xyz = np.array(zip(x,y,z))
         xyz, indices = np.unique(xyz, axis=0, return_index=True)
         ql = ql[indices]
-        theta = theta[indices]
-        phi = phi[indices]
         x, y, z = xyz.T
+
+        max_idx = np.argmax(ql)
+        print 'ql_max = ', ql[max_idx], '\n'
 
         fig = mlab.figure(size=(400*2, 350*2)) 
         pts = mlab.points3d(x, y, z, ql, colormap='viridis', scale_mode='none', scale_factor=0.03)
+        # plot max ql point (red)
+        mlab.points3d(x[max_idx], y[max_idx], z[max_idx], ql[max_idx], color=(1,0,0), scale_mode='none', scale_factor=0.03)
+        # delaunay triagulation (mesh, interpolation)
+        tri = mlab.pipeline.delaunay3d(pts)
+        tri_smooth = mlab.pipeline.poly_data_normals(tri) # smooths delaunay triangulation mesh
+        surf = mlab.pipeline.surface(tri_smooth, colormap='viridis')
         mlab.axes(pts, xlabel='a', ylabel='b', zlabel='c\'')
-        mlab.colorbar(pts, orientation='vertical') 
-        mlab.view(azimuth=0, elevation=0, distance=7.5, figure=fig)            
+        mlab.colorbar(surf, orientation='vertical') 
+        mlab.view(azimuth=0, elevation=-90, distance=7.5, figure=fig)            
         mlab.show()        
 
 def main(check_tilt, scatter_11, scatter_4, heatmap_11, heatmap_4, fitted_heatmap_11):
@@ -403,7 +483,7 @@ def main(check_tilt, scatter_11, scatter_4, heatmap_11, heatmap_4, fitted_heatma
 
             data = pd_load(f, p_dir)
             data = split_filenames(data)
-            tilt_check(data, dets, tilts, f, p_dir, beam_11MeV, show_plots=False, save_pickle=True)
+            tilt_check(data, dets, tilts, f, p_dir, beam_11MeV, show_plots=True, save_pickle=False)
     
     # 3d plotting
     theta_n = [70, 60, 50, 40, 30, 20, 20, 30, 40, 50, 60, 70]
@@ -413,7 +493,7 @@ def main(check_tilt, scatter_11, scatter_4, heatmap_11, heatmap_4, fitted_heatma
 
     ## crystal orientations ((a_x, a_y, a_z),(b_x, b_y, b_z),(c'_x, c'_y, c'_z))
     b_up = np.asarray(((-1,0,0), (0,-1,0), (0,0,1)))
-    cp_up = np.asarray(((-1,0,0), (0,0,1), (0,-1,0)))
+    cp_up = np.asarray(((1,0,0), (0,0,1), (0,-1,0)))
 
     ## use to check orientations
     if scatter_11:
@@ -423,15 +503,16 @@ def main(check_tilt, scatter_11, scatter_4, heatmap_11, heatmap_4, fitted_heatma
 
     ## heat maps with data points
     if heatmap_11:
-        plot_heatmaps(fin[0], fin[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, beam_11MeV=True)
+        plot_heatmaps(fin[0], fin[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, beam_11MeV=True, multiplot=False)
     if heatmap_4:
-        plot_heatmaps(fin[2], fin[3], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, beam_11MeV=False)
+        plot_heatmaps(fin[2], fin[3], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, beam_11MeV=False, multiplot=False)
 
     ## heat maps with fitted data
     sin_fits = ['bvert_11MeV_sin_params.p', 'cpvert_11MeV_sin_params.p', 'bvert_4MeV_sin_params.p', 'cpvert_4MeV_sin_params.p']
     if fitted_heatmap_11:
         plot_fitted_heatmaps(sin_fits[0], sin_fits[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True)
-
+    if fitted_heatmap_4:
+        plot_fitted_heatmaps(sin_fits[2], sin_fits[3], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=False)
 
 if __name__ == '__main__':
     # check 3d scatter plots for both crystals
@@ -446,6 +527,7 @@ if __name__ == '__main__':
     heatmap_4 = False
 
     # plot heatmaps with fitted data
-    fitted_heatmap_11 = True   
+    fitted_heatmap_11 = True
+    fitted_heatmap_4 = False
 
     main(check_tilt, scatter_11, scatter_4, heatmap_11, heatmap_4, fitted_heatmap_11)
