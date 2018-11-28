@@ -76,10 +76,10 @@ def order_by_rot(data, beam_11MeV):
     else:
         if len(data.filename) == 15:
             rot_order = [12, 13, 14, 5, 6, 0, 1, 2, 3, 7, 8, 9, 4, 10, 11]
-            angles =    [0, 20, 30, 40, 50, 60, 70, 80, 90, 100, 120, 140, 160, 180, 190]
+            angles =    np.array([0, 20, 30, 40, 50, 60, 70, 80, 90, 100, 120, 140, 160, 180, 190])
         else:
             rot_order = [12, 13, 5, 6, 0, 1, 2, 3, 7, 8, 9, 4, 10, 11]
-            angles =    [0, 20, 30, 40, 50, 60, 70, 80, 90, 100, 120, 140, 160, 180]
+            angles =    np.array([0, 20, 30, 40, 50, 60, 70, 80, 90, 100, 120, 140, 160, 180])
 
     data = data.assign(rot_order = rot_order)
     data = data.sort_values('rot_order')
@@ -112,22 +112,24 @@ def get_max_ql_per_det(det_data, dets, tilts):
             max_col = tilt_df.iloc[idxmax]
             print '{:^5} {:>8}'.format(max_col.tilt, max_col.ql_mean)
 
-def tilt_check(det_data, dets, tilts, pickle_name, p_dir, beam_11MeV, show_plots, save_pickle):
+def tilt_check(det_data, dets, tilts, pickle_name, p_dir, beam_11MeV, show_plots, save_pickle, print_max_ql, get_a_data):
     ''' Use to check lo for a given det and tilt
         Data is fitted with sinusoids
         Sinusoid fit parameters can be saved for later use by setting save_pickle=True
+        a and c' axes directions are marked with black scatter point
     '''
-    get_max_ql_per_det(det_data, dets, tilts)
+    if print_max_ql:
+        get_max_ql_per_det(det_data, dets, tilts)
  
     fig_no = [1, 2, 3, 4, 5, 6, 6, 5, 4, 3, 2, 1]
     color = ['r', 'r', 'r', 'r', 'r', 'r', 'b', 'b', 'b', 'b', 'b', 'b']
     a_axis_dir = [20, 30, 40, 50, 60, 70, 110, 120, 130, 140, 150, 160] # angle for recoils along a-axis (relative)
-    cp_b_axes_dir = [x + 90 for x in a_axis_dir[:6]] + [x - 90 for x in a_axis_dir[6:]] # angles for recoils along c' or b axes
+    cp_b_axes_dir = [x + 90 for x in a_axis_dir[:6]] + [x - 90 for x in a_axis_dir[6:]] # angles for recoils along c' or b axes (only for tilt=0)
 
-    sin_params = []
+    sin_params, a_axis_data = [], []
     sin_params.append(['tilt', 'det', 'a', 'b', 'phi'])
+    a_axis_data.append(['crystal', 'energy', 'det', 'tilt', 'ql', 'abs_uncert'])
     for tilt in tilts:
-        print '\n'
         tilt_df = det_data.loc[(det_data.tilt == str(tilt))]
 
         for d, det in enumerate(dets):
@@ -141,6 +143,11 @@ def tilt_check(det_data, dets, tilts, pickle_name, p_dir, beam_11MeV, show_plots
             x_vals_rad = np.deg2rad(x_vals)
             y_vals = sin_func(x_vals_rad, pars['a'], pars['b'], pars['phi'])
             sin_params.append([tilt, det, pars['a'], pars['b'], pars['phi']])
+
+            name = re.split('\.|_', det_df.filename.iloc[0])  
+            if a_axis_dir[d] in angles:
+                a_axis_ql = det_df.ql_mean.iloc[np.where(angles == a_axis_dir[d])].values[0]
+                a_axis_data.append([name[0], name[1], name[4], tilt, a_axis_ql, det_df.ql_abs_uncert.iloc[np.where(angles == a_axis_dir[d])].values[0]])
 
             # plot same det angles together
             if show_plots:
@@ -156,24 +163,29 @@ def tilt_check(det_data, dets, tilts, pickle_name, p_dir, beam_11MeV, show_plots
                 plt.plot(x_vals, y_vals, '--', color=color[d])
                 
                 # check a-axis recoils have max ql - 11 and 4 MeV look good
-                name = re.split('\.|_', det_df.filename.iloc[0])  
-                plt.scatter(angles[np.where(angles == a_axis_dir[d])], det_df.ql_mean.iloc[np.where(angles == a_axis_dir[d])], c='k', s=120, zorder=10, label='')
-                plt.scatter(angles[np.where(angles == cp_b_axes_dir[d])], det_df.ql_mean.iloc[np.where(angles == cp_b_axes_dir[d])], c='k', s=120, zorder=10, label='')
+                plt.scatter(angles[np.where(angles == a_axis_dir[d])], a_axis_ql, c='k', s=120, zorder=10, label='')
+                if tilt==0:
+                    plt.scatter(angles[np.where(angles == cp_b_axes_dir[d])], det_df.ql_mean.iloc[np.where(angles == cp_b_axes_dir[d])], c='k', s=120, zorder=10, label='')
                                    
                 plt.xlim(-5, max(angles)+5)
                 plt.ylabel('light output (MeVee)')
                 plt.xlabel('rotation angle (degree)')
                 name = name[0] + '_' + name[1] + '_' + name[2] + '_' + name[4]
-                print name
+                print '\n', name
                 plt.title(name)
                 plt.legend()
-        plt.show()
+        if show_plots:
+            plt.show()
 
     # save sinusoid fit to pickle
     if save_pickle:
         name = pickle_name.split('.')[0]
         pickle.dump( sin_params, open( p_dir + name + '_sin_params.p', "wb" ) )
         print 'pickle saved to ' + p_dir + name + '_sin_params.p'
+
+    if get_a_data:
+        headers = a_axis_data.pop(0)
+        return pd.DataFrame(a_axis_data, columns=headers)
 
 def polar_to_cartesian(theta, phi, crystal_orientation, cp_up):
     # cp_up
@@ -190,7 +202,7 @@ def polar_to_cartesian(theta, phi, crystal_orientation, cp_up):
         z = np.cos(theta)       
     return x, y , z
 
-def crystal_basis_vectors(theta,axis_up):
+def crystal_basis_vectors(theta, axis_up):
     # Rotation is counterclockwise about the a-axis (x-axis)
     theta = np.deg2rad(theta)
     rot_matix_x = np.asarray(((1,0,0),(0,np.cos(theta),np.sin(theta)),(0,-np.sin(theta),np.cos(theta))))
@@ -210,8 +222,8 @@ def map_3d(tilt, crystal_orientation, angles, theta_neutron, phi_neutron):
         rot_orientation = np.transpose(np.dot(rot_matrix_y, np.transpose(basis_vectors)))
     
         # proton recoil
-        theta_proton = np.deg2rad(theta_neutron) # proton recoils at 90 deg relative to theta
-        phi_proton = np.deg2rad(phi_neutron + 180) # phi_proton will be opposite sign of phi_neutron
+        theta_proton = np.deg2rad(theta_neutron) # proton recoils at 90 deg relative to theta_neutron
+        phi_proton = np.deg2rad(phi_neutron  + 180) # phi_proton will be opposite sign of phi_neutron
     
         # cartesian vector    
         x_p = np.sin(theta_proton)*np.cos(phi_proton)
@@ -329,16 +341,19 @@ def plot_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_
         x_b, y_b, z_b = polar_to_cartesian(theta_b, phi_b, b_up, cp_up)
         x_cp, y_cp, z_cp = polar_to_cartesian(theta_cp, phi_cp, cp_up, cp_up)
 
-        x = np.concatenate((x_b, x_cp))
-        y = np.concatenate((y_b, y_cp))
-        z = np.concatenate((z_b, z_cp))
+        x = np.round(np.concatenate((x_b, x_cp)), 12)
+        y = np.round(np.concatenate((y_b, y_cp)), 12)
+        z = np.round(np.concatenate((z_b, z_cp)), 12)
         ql = np.concatenate([df_b_mapped.ql_mean.values, df_b_mapped_mirror.ql_mean.values, df_cp_mapped.ql_mean.values, df_cp_mapped_mirror.ql_mean.values])
 
+        tilts = np.concatenate([df_b_mapped.tilt.values, df_b_mapped_mirror.tilt.values, df_cp_mapped.tilt.values, df_cp_mapped_mirror.tilt.values])
+
         # remove repeated points
-        xyz = np.array(zip(x,y,z))
-        xyz, indices = np.unique(xyz, axis=0, return_index=True)
+        xyz = np.array(zip(x, y, z))
+        xyz_u, indices = np.unique(xyz, axis=0, return_index=True)
         ql = ql[indices]
-        x, y, z = xyz.T
+        tilts = tilts[indices]
+        x, y, z = xyz_u.T
 
         # points3d with delaunay filter - works best!!
         ## use for nice looking plots
@@ -363,15 +378,12 @@ def plot_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_
                 #    print names[i] + '.png saved'
                 #mlab.clf()
                 #mlab.close()
-
-                for x_val, y_val, z_val, ql_val in zip(x, y, z, ql):
-                    mlab.text3d(x_val, y_val, z_val, str(ql_val), scale=0.03, color=(0,0,0), figure=fig)
                 fig.scene.disable_render = False
 
         ## use for analysis 
         else:
             max_idx = np.argmax(ql)
-            print '\nql_max = ', ql[max_idx]
+            print 'ql_max = ', ql[max_idx], '\n'
 
             fig = mlab.figure(size=(400*2, 350*2)) 
             fig.scene.disable_render = True
@@ -386,12 +398,16 @@ def plot_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_
             surf = mlab.pipeline.surface(tri_smooth, colormap='viridis')
             
             # ql vals
-            for x_val, y_val, z_val, ql_val in zip(x, y, z, ql):
-                mlab.text3d(x_val, y_val, z_val, str(ql_val), scale=0.03, color=(0,0,0), figure=fig)
+            for x_val, y_val, z_val, ql_val, tilt in zip(x, y, z, ql, tilts):
+                #mlab.text3d(x_val, y_val, z_val, str(ql_val), scale=0.03, color=(0,0,0), figure=fig)
+                mlab.text3d(x_val, y_val, z_val, str(tilt), scale=0.03, color=(0,0,0), figure=fig)
+
+                #if ql_val>5.3:
+                #    print x_val, y_val, z_val, ql_val
 
             mlab.axes(pts, xlabel='a', ylabel='b', zlabel='c\'')
             mlab.colorbar(surf, orientation='vertical') 
-            mlab.view(azimuth=0, elevation=0, distance=7.5, figure=fig)  
+            mlab.view(azimuth=0, elevation=90, distance=7.5, figure=fig)  
             fig.scene.disable_render = False            
             mlab.show()
 
@@ -435,9 +451,9 @@ def plot_fitted_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up,
         x_b, y_b, z_b = polar_to_cartesian(theta_b, phi_b, b_up, cp_up)
         x_cp, y_cp, z_cp = polar_to_cartesian(theta_cp, phi_cp, cp_up, cp_up)
 
-        x = np.concatenate((x_b, x_cp))
-        y = np.concatenate((y_b, y_cp))
-        z = np.concatenate((z_b, z_cp))
+        x = np.round(np.concatenate((x_b, x_cp)), 12)
+        y = np.round(np.concatenate((y_b, y_cp)), 12)
+        z = np.round(np.concatenate((z_b, z_cp)), 12)
         ql = np.concatenate([df_b_mapped.ql.values, df_b_mapped_mirror.ql.values, df_cp_mapped.ql.values, df_cp_mapped_mirror.ql.values])
 
         # remove repeated points
@@ -462,7 +478,66 @@ def plot_fitted_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up,
         mlab.view(azimuth=0, elevation=-90, distance=7.5, figure=fig)            
         mlab.show()        
 
-def main(check_tilt, scatter_11, scatter_4, heatmap_11, heatmap_4, fitted_heatmap_11):
+def compare_a_axis_recoils(fin, dets, p_dir, plot_by_det):
+    for f in fin:
+        if '11' in f:
+            beam_11MeV = True
+        else:
+            beam_11MeV = False
+        if 'bvert' in f:
+            tilts = [0, 45, -45, 30, -30, 15, -15]
+        else:
+            tilts = [0, 30, -30, 15, -15]
+
+        data = pd_load(f, p_dir)
+        data = split_filenames(data)
+        a_axis_df = tilt_check(data, dets, tilts, f, p_dir, beam_11MeV, show_plots=False, save_pickle=False, print_max_ql=False, get_a_data=True)
+
+        # plot each det separately
+        if plot_by_det:
+            print '\n', f
+            fig_no = [1, 2, 3, 4, 5, 6, 6, 5, 4, 3, 2, 1]
+            color = ['r', 'r', 'r', 'r', 'r', 'r', 'b', 'b', 'b', 'b', 'b', 'b']
+            print '\ndet   ql_mean    std    rel uncert'
+            print '------------------------------------'
+            for d, det in enumerate(dets):
+
+                det_df = a_axis_df[(a_axis_df.det == 'det'+str(det))]
+                if det_df.empty:
+                    continue
+
+                # calculate mean and std
+                ql_mean = det_df.ql.mean()
+                ql_std = det_df.ql.std()
+                print '{:^4} {:>8} {:>8} {:>8}'.format(det, round(ql_mean, 4), round(ql_std, 4), round(ql_std/ql_mean, 4))
+
+                plt.figure(fig_no[d])
+                plt.errorbar(det_df.tilt.values, det_df.ql.values, yerr=det_df.abs_uncert.values, ecolor='black', markerfacecolor='None', fmt='o', 
+                                markeredgecolor=color[d], markeredgewidth=1, markersize=10, capsize=1, label='det' + str(det), zorder=10)
+                xvals = np.linspace(-47, 47, 10)
+                plt.plot(xvals, [ql_mean]*10, color=color[d], label='det' + str(det) + ' mean')
+                plt.plot(xvals, [ql_mean + ql_std]*10, '--', color=color[d], alpha=0.2)
+                plt.plot(xvals, [ql_mean - ql_std]*10, '--', color=color[d], alpha=0.2)
+                plt.fill_between(xvals, [ql_mean + ql_std]*10, [ql_mean - ql_std]*10, facecolor=color[d], alpha=0.05, label='std')
+                plt.xlabel('tilt angle (deg)')
+                plt.ylabel('light output (MeVee)')
+                plt.xlim(-47, 47)
+                plt.title(f)
+                plt.legend(fontsize=10)
+            plt.show()
+
+        # plot all qls for each crystal/energy
+        else:
+            plt.figure()
+            plt.errorbar(a_axis_df.tilt.values, a_axis_df.ql.values, yerr=a_axis_df.abs_uncert.values, ecolor='black', markerfacecolor='None', fmt='o', 
+                            markeredgecolor='red', markeredgewidth=1, markersize=10, capsize=1)
+            plt.xlabel('tilt angle (deg)')
+            plt.ylabel('light output (MeVee)')
+            plt.xlim(-50, 50)
+            plt.title(f)
+    plt.show()
+
+def main():
     cwd = os.getcwd()
     p_dir = cwd + '/pickles/'
     fin = ['bvert_11MeV.p', 'cpvert_11MeV.p', 'bvert_4MeV.p', 'cpvert_4MeV.p']
@@ -483,7 +558,11 @@ def main(check_tilt, scatter_11, scatter_4, heatmap_11, heatmap_4, fitted_heatma
 
             data = pd_load(f, p_dir)
             data = split_filenames(data)
-            tilt_check(data, dets, tilts, f, p_dir, beam_11MeV, show_plots=True, save_pickle=False)
+            tilt_check(data, dets, tilts, f, p_dir, beam_11MeV, show_plots=True, save_pickle=False, print_max_ql=False, get_a_data=False)
+
+    # comparison of ql for recoils along the a-axis
+    if compare_a_axes:
+        compare_a_axis_recoils(fin, dets, p_dir, plot_by_det=True)
     
     # 3d plotting
     theta_n = [70, 60, 50, 40, 30, 20, 20, 30, 40, 50, 60, 70]
@@ -522,6 +601,9 @@ if __name__ == '__main__':
     # check lo for a specific tilt (sinusoids)
     check_tilt = False
 
+    # compare a_axis recoils (all tilts measure ql along a-axis)
+    compare_a_axes = False
+
     # plot heatmaps with data points
     heatmap_11 = False
     heatmap_4 = False
@@ -530,4 +612,4 @@ if __name__ == '__main__':
     fitted_heatmap_11 = True
     fitted_heatmap_4 = False
 
-    main(check_tilt, scatter_11, scatter_4, heatmap_11, heatmap_4, fitted_heatmap_11)
+    main()

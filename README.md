@@ -25,4 +25,12 @@
         * br ql maxes are mostly not in a-c' plane
         * FIXED:
             * changed theta_proton = np.deg2rad(90 - theta_neutron) (line 213) to theta_proton = np.deg2rad(theta_neutron)
-            * 90 - theta_neutron not necessary -- Why??? 
+            * 90 - theta_neutron give incorrect result -- Why??? Does it matter??
+
+* 11/28/2018
+    * haven't figured out why map_3d works with theta_proton=theta_neutron and not with theta_proton = 90-theta_neutron
+        * letting this go for now - look into it later
+    * added compare_a_axis_recoils function 
+        * LO for all tilts along a-axis show good agreement (close to expected uncertainty on the measurement)
+            * relative uncerts at 11MeV <1.3%
+            * relative uncerts at 4 MeV <3.2%
