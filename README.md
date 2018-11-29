@@ -34,3 +34,9 @@
         * LO for all tilts along a-axis show good agreement (close to expected uncertainty on the measurement)
             * relative uncerts at 11MeV <1.3%
             * relative uncerts at 4 MeV <3.2%
+
+* 11/29/18
+    * added pulse shape plots
+        * issues with 3d mapping are evident
+            * plots look good at 11 MeV but are messed up at 4 MeV
+            
