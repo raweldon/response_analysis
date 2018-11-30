@@ -1,4 +1,4 @@
-# response_analysis
+# response_analysis notes
 
 * 11/13/2018     
     * finally have a working version
@@ -39,4 +39,11 @@
     * added pulse shape plots
         * issues with 3d mapping are evident
             * plots look good at 11 MeV but are messed up at 4 MeV
+    * added plot of pulse shape ratios - trend is oppposite what was reported by schuster
+
+* 11/30/18
+    * cleaned up some plots to show results
+    * added prompt and delayed plots to tilt_check 
+        * trend like ql
+        * not very interesting and does not give any insight into qs/ql
             
