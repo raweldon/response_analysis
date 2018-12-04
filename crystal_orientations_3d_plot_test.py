@@ -14,7 +14,7 @@
            x
 
     Crystal coordinates defined such that theta_p is 0 along the c' axis and 90 at the b axis.
-      Phi_p is 0 at the a-axs. a,b,c' is x,y,z.
+      Phi_p is 0 at the a-axis. a,b,c' is x,y,z.
 
                     c'
                     ^
@@ -66,8 +66,7 @@ def plot_3d_vectors(ax3d, x, thetap_all, xdata, colors, text):
         # draw vectors
         ax3d.quiver(0,0,0,x_data[x][p],y_data[x][p],z_data[x][p],pivot='tail',arrow_length_ratio=0.05,color=colors[x],linestyle='--',alpha=0.3)
         ax3d.quiver(0,0,0,-x_data[x][p],-y_data[x][p],-z_data[x][p],pivot='tail',arrow_length_ratio=0.05,color=colors[x],linestyle='--',alpha=0.3)
-
-        
+       
 def plot_3d(crystal_tilt_angles,x_data,y_data,z_data,crystal,vectors,text):
     ''' Plot in 3d
         set vectors == True to plot vector lines
@@ -95,11 +94,12 @@ def plot_3d(crystal_tilt_angles,x_data,y_data,z_data,crystal,vectors,text):
     plt.legend()
 
 # measurement information
-angles = np.arange(0,180,10)
-#theta_neutron = [70, 60, 50, 40, 30, 20, 15, 20, 30, 40, 50, 60, 70]
-#phi_neutron = [180, 180, 180, 180, 180, 180, 180, 0, 0, 0, 0, 0, 0]
-theta_neutron = [70,70]#, 20, 30, 40]
-phi_neutron = [180,0]#, 0, 180, 180]
+#angles = np.arange(0,180,10) # 11MeV beam rot angles
+angles = [0, 20, 30, 40, 50, 60, 70, 80, 90, 100, 120, 140, 160, 180] # 4 MeV beam rot angles
+theta_neutron = [70, 60, 50, 40, 30, 20, 20, 30, 40, 50, 60, 70]
+phi_neutron = [180, 180, 180, 180, 180, 180, 0, 0, 0, 0, 0, 0]
+#theta_neutron = [70,70]#, 20, 30, 40]
+#phi_neutron = [180,0]#, 0, 180, 180]
 beam_energy = 11.33 # MeV
 energy = [round(np.sin(np.deg2rad(x))**2 * beam_energy,2) for x in theta_neutron]
 #crystal_tilt_angles = np.arange(0,180,45)
@@ -111,7 +111,8 @@ cp_up = np.asarray(((1,0,0), (0,0,1), (0,-1,0)))
 
 crystal_orientations = [a_up,b_up,cp_up]
 
-theta_phi=[]
+theta_phi, p_data = [], []
+p_data.append(['theta', 'phi', 'rot_anlge', 'tilt', 'theta_n'])
 for index, theta_n in enumerate(theta_neutron): 
     for co,crystal_orientation in enumerate(crystal_orientations):
         # define crystal tilt angles for each crystal
@@ -137,7 +138,7 @@ for index, theta_n in enumerate(theta_neutron):
                 rot_orientation = np.transpose(np.dot(rot_matrix_y, np.transpose(basis_vectors)))
             
                 # proton recoil
-                theta_proton = np.deg2rad(90 - theta_n) # proton recoils at 90 deg relative to theta
+                theta_proton = np.deg2rad(theta_n) # proton recoils at 90 deg relative to theta
                 phi_proton = np.deg2rad(phi_neutron[index] + 180) # phi_proton will be opposite sign of phi_neutron
             
                 # cartesian vector    
@@ -170,6 +171,8 @@ for index, theta_n in enumerate(theta_neutron):
                 if np.dot(vector_proj_ab, rot_orientation[1]) < 0:
                     phi_p = 360 - phi_p
     
+                p_data.append([np.deg2rad(theta_p), np.deg2rad(phi_p), angle, tilt, theta_n])
+
                 thetap.append(np.deg2rad(theta_p))
                 phip.append(np.deg2rad(phi_p)) 
 
@@ -218,9 +221,9 @@ for index, theta_n in enumerate(theta_neutron):
         for x, xdata in enumerate(axis[0]):
             for p, thetap in enumerate(thetap_all[x]):
                 writer.writerow([axis[3], crystal_tilt_angles[x], angles[p], round(np.rad2deg(thetap_all[x][p]),3), round(np.rad2deg(phip_all[x][p]),3)])
-    #            ax3d.text(axis[0][x][p],axis[1][x][p],axis[2][x][p], '($%d\degree, %d\degree$)' % (np.rad2deg(thetap_all[x][p]),np.rad2deg(phip_all[x][p])), 
-    #                      size=10, zorder=100, color='k') 
-    #            print '($%d\degree, %d\degree$)' % (np.rad2deg(thetap_all[x][p]),np.rad2deg(phip_all[x][p]))
+                #ax3d.text(axis[0][x][p],axis[1][x][p],axis[2][x][p], '($%d^{\circ}$, $%d^{\circ}$)' % (np.rad2deg(thetap_all[x][p]),np.rad2deg(phip_all[x][p])), 
+                #          size=10, zorder=100, color='k') 
+                #print '($%d^{\circ}$, $%d^{\circ}$)' % (np.rad2deg(thetap_all[x][p]),np.rad2deg(phip_all[x][p]))
                 # draw vectors
                 ax3d.quiver(0,0,0,axis[0][x][p],axis[1][x][p],axis[2][x][p],pivot='tail',arrow_length_ratio=0.05,color=colors[i],linestyle='--',alpha=0.3)
                 ax3d.quiver(0,0,0,-axis[0][x][p],-axis[1][x][p],-axis[2][x][p],pivot='tail',arrow_length_ratio=0.05,color=colors[i],linestyle='--',alpha=0.3)
@@ -233,6 +236,7 @@ for index, theta_n in enumerate(theta_neutron):
     ax3d.set_ylabel('\nb')
     ax3d.set_zlabel('c\'  ')
     ax3d.set_aspect("equal")
+    ax3d.set_title(theta_n)
 #    ax3d.set_title(r'$\theta =$'+str(theta_n)+'$\degree, \phi =$'+str(phi_neutron[index])+'$\degree$ neutron scatter, '+crystal)
     plt.tight_layout()
     plt.legend()

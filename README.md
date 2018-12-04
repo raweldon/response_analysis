@@ -46,4 +46,13 @@
     * added prompt and delayed plots to tilt_check 
         * trend like ql
         * not very interesting and does not give any insight into qs/ql
+    * issues with 3d mapping for 4 MeV recoils? 
             
+* 12/3/18
+    * 3d mapping issue is related to x-y-z a-b-c' relationship
+        * all points are already 90 - theta_n due to the cyrstalline/lab-frame mapping 
+        * e.g. the mapping expects the a-axis in-line with the first rotation measurement while for the experiment we had c' in-line with the first rotation measurement
+    * added rotation angle plotting to scatter_check_3d; includes plotting with mayavi or matplotlib (no text)
+
+* 12/4/18
+    * add polar plots of data with rbf interpolation

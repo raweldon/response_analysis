@@ -20,7 +20,10 @@ import time
 import os
 from mayavi import mlab
 import pylab as plt
+import scipy
 from scipy.spatial import Delaunay
+from scipy.interpolate import griddata
+from scipy.ndimage import gaussian_filter
 import lmfit
 import pickle
 
@@ -267,16 +270,17 @@ def polar_to_cartesian(theta, phi, crystal_orientation, cp_up):
         z = np.cos(theta)       
     return x, y , z
 
-def crystal_basis_vectors(theta, axis_up):
+def crystal_basis_vectors(angle, axis_up):
     # Rotation is counterclockwise about the a-axis (x-axis)
-    theta = np.deg2rad(theta)
-    rot_matix_x = np.asarray(((1,0,0),(0,np.cos(theta),np.sin(theta)),(0,-np.sin(theta),np.cos(theta))))
-    rotated_axes = np.transpose(np.dot(rot_matix_x,np.transpose(axis_up)))  
+    theta = np.deg2rad(angle)
+    rot_matrix_x = np.asarray(((1,0,0),(0,np.cos(theta),np.sin(theta)),(0,-np.sin(theta),np.cos(theta))))
+    rotated_axes = np.transpose(np.dot(rot_matrix_x,np.transpose(axis_up)))  
     return rotated_axes
 
 def map_3d(tilt, crystal_orientation, angles, theta_neutron, phi_neutron):
     # map points to sphere surface using rotation angle (angles), neutron scatter angle, and tilt angle
 
+    #print '\n', tilt
     basis_vectors = crystal_basis_vectors(tilt, crystal_orientation)
     thetap, phip = [], []
     for angle in angles:
@@ -337,11 +341,12 @@ def map_data_3d(data, det, tilts, crystal_orientation, theta_neutron, phi_neutro
 
         update_df = tilt_df.assign(phi = phip)
         update_df = update_df.assign(theta = thetap)
+        update_df = update_df.assign(rot_angles = angles)
         dfs.append(update_df)
     return pd.concat(dfs)
 
-def scatter_check_3d(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, beam_11MeV):
-    ''' Scatter plots of proton recoil trajectories
+def scatter_check_3d(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, beam_11MeV, matplotlib):
+    ''' Scatter plots of proton recoil trajectories (matplotlib)
         Colors recoils from bvert and cpvert crytals
     '''
     data_bvert = pd_load(fin1, p_dir)
@@ -352,34 +357,51 @@ def scatter_check_3d(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, the
     for d, det in enumerate(dets):       
         df_b_mapped = map_data_3d(data_bvert, det, bvert_tilt, b_up, theta_n[d], phi_n[d], beam_11MeV) 
         df_cp_mapped = map_data_3d(data_cpvert, det, cpvert_tilt, cp_up, theta_n[d], phi_n[d], beam_11MeV)
+
         # convert to cartesian
         theta1 = df_b_mapped.theta.values
         phi1 = df_b_mapped.phi.values
         theta2 = df_cp_mapped.theta.values
         phi2 = df_cp_mapped.phi.values
-
-        fig = plt.figure(det)
-        ax = fig.add_subplot(111, projection='3d')
+        angles1 = df_b_mapped.rot_angles.values
+        angles2 = df_cp_mapped.rot_angles.values
         x1, y1, z1 = polar_to_cartesian(theta1, phi1, b_up, cp_up)
         x2, y2, z2 = polar_to_cartesian(theta2, phi2, cp_up, cp_up)
 
-        # plot
-        ax.scatter(x1, y1, z1, c='r', label='bvert')
-        ax.scatter(x2, y2, z2, c='b', label='cpvert')
-        ax.set_xlim([-1.1,1.1])
-        ax.set_ylim([-1.1,1.1])
-        ax.set_zlim([-1.1,1.1])
-        ax.set_xlabel('a')
-        ax.set_ylabel('b')
-        ax.set_zlabel('c\'')
-        ax.set_aspect('equal')
-        if beam_11MeV:
-            ax.set_title('11.3 MeV beam, det ' + str(det) + '  (' + str(theta_n) +'$^{\circ}$)')
+        if matplotlib:
+            fig = plt.figure(det)
+            ax = fig.add_subplot(111, projection='3d')
+            ax.scatter(x1, y1, z1, c='r', label='bvert')
+            ax.scatter(x2, y2, z2, c='b', label='cpvert')
+            ax.set_xlim([-1.1,1.1])
+            ax.set_ylim([-1.1,1.1])
+            ax.set_zlim([-1.1,1.1])
+            ax.set_xlabel('a')
+            ax.set_ylabel('b')
+            ax.set_zlabel('c\'')
+            ax.set_aspect('equal')
+            if beam_11MeV:
+                ax.set_title('11.3 MeV beam, det ' + str(det) + '  (' + str(theta_n[d]) +'$^{\circ}$)')
+            else:
+                ax.set_title('4.8 MeV beam, det ' + str(det) + '  (' + str(theta_n[d]) +'$^{\circ}$)')
+            plt.tight_layout()
+            plt.legend()
+            plt.show()
+
         else:
-            ax.set_title('4.8 MeV beam, det ' + str(det) + '  (' + str(theta_n) +'$^{\circ}$)')
-        plt.tight_layout()
-        plt.legend()
-        plt.show()
+            fig = mlab.figure(size=(400*2, 350*2)) 
+            pts = mlab.points3d(x1, y1, z1, color=(1,0,0), scale_mode='none', scale_factor=0.03)
+            mlab.points3d(x2, y2, z2, color=(0,0,1), scale_mode='none', scale_factor=0.03)
+            
+            for x_val, y_val, z_val, angle in zip(x1, y1, z1, angles1):
+                mlab.text3d(x_val, y_val, z_val, str(angle), scale=0.03, color=(0,0,0), figure=fig)
+            for x_val, y_val, z_val, angle in zip(x2, y2, z2, angles2):
+                mlab.text3d(x_val, y_val, z_val, str(angle), scale=0.03, color=(0,0,0), figure=fig)
+
+            mlab.axes(pts, xlabel='a', ylabel='b', zlabel='c\'')
+            mlab.view(azimuth=0, elevation=90, distance=7.5, figure=fig)  
+            mlab.title('det ' + str(det))
+            mlab.show()
 
 def heatmap_multiplot(x, y, z, data, theta_n, d, cwd, save_multiplot, fitted):
     #            a   b  c'  nice 
@@ -411,7 +433,7 @@ def heatmap_multiplot(x, y, z, data, theta_n, d, cwd, save_multiplot, fitted):
             mlab.clf()
             mlab.close()
 
-def heatmap_singleplot(x, y, z, data, tilts, name):
+def heatmap_singleplot(x, y, z, data, tilts, name, show_delaunay):
     max_idx = np.argmax(data)
     print name + ' max = ', round(data[max_idx], 4)
 
@@ -424,15 +446,16 @@ def heatmap_singleplot(x, y, z, data, tilts, name):
     
     # delaunay triagulation (mesh, interpolation)
     tri = mlab.pipeline.delaunay3d(pts)
+    edges = mlab.pipeline.extract_edges(tri)
+    if show_delaunay:
+        edges = mlab.pipeline.surface(edges, colormap='viridis')
+
     tri_smooth = mlab.pipeline.poly_data_normals(tri) # smooths delaunay triangulation mesh
     surf = mlab.pipeline.surface(tri_smooth, colormap='viridis')
     
     for x_val, y_val, z_val, ql_val, tilt in zip(x, y, z, data, tilts):
         #mlab.text3d(x_val, y_val, z_val, str(ql_val), scale=0.03, color=(0,0,0), figure=fig)
-        mlab.text3d(x_val, y_val, z_val, str(tilt), scale=0.03, color=(0,0,0), figure=fig)
-
-        #if ql_val>5.3:
-        #    print x_val, y_val, z_val, ql_val
+        mlab.text3d(x_val, y_val, z_val, str(tilt), scale=0.03, color=(0,0,0), figure=fig) 
 
     mlab.axes(pts, xlabel='a', ylabel='b', zlabel='c\'')
     mlab.colorbar(surf, orientation='vertical') 
@@ -440,7 +463,7 @@ def heatmap_singleplot(x, y, z, data, tilts, name):
     mlab.title(name)
     fig.scene.disable_render = False          
 
-def plot_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV, plot_pulse_shape, multiplot, save_multiplot):
+def plot_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV, plot_pulse_shape, multiplot, save_multiplot, show_delaunay):
     ''' Plots the heatmap for a hemishpere of measurements
         Full sphere is made by plotting a mirror image of the hemiphere measurements
     '''
@@ -491,9 +514,9 @@ def plot_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_
 
         ## use for analysis 
         else:
-            heatmap_singleplot(x, y, z, ql, tilts, 'ql')
+            heatmap_singleplot(x, y, z, ql, tilts, 'ql', show_delaunay)
             if plot_pulse_shape:
-                heatmap_singleplot(x, y, z, qs/ql, tilts, 'qs/ql')
+                heatmap_singleplot(x, y, z, qs/ql, tilts, 'qs/ql', show_delaunay)
             mlab.show()
 
 def map_fitted_data_3d(data, det, tilts, crystal_orientation, theta_neutron, phi_neutron, beam_11MeV):
@@ -725,6 +748,73 @@ def plot_ratios(fin, dets, p_dir, pulse_shape):
 
     plt.show()
 
+def polar_norm(x1, x2):
+    # norm distance function for polar coords (default is euclidean, cartesian)
+    norm = np.sqrt(x1[1]**2 + x2[1]**2 - 2*x1[1]*x2[1]*np.cos(x1[0] - x2[0]))
+    norm[np.isnan(norm)] = 0
+    return norm
+
+def polar_plot(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, beam_11MeV):
+    ''' I was going to use this function to interpolate over the points in polar coordinates, but that does not work well due to 
+            wrap around from the edges
+        Need to use interpolation on the sphere to avoid edge effects
+    '''
+    data_bvert = pd_load(fin1, p_dir)
+    data_bvert = split_filenames(data_bvert)
+    data_cpvert = pd_load(fin2, p_dir)
+    data_cpvert = split_filenames(data_cpvert)
+    for d, det in enumerate(dets):
+        print '\ndet_no =', det, 'theta_n =', theta_n[d]
+        
+        df_b_mapped = map_data_3d(data_bvert, det, bvert_tilt, b_up, theta_n[d], phi_n[d], beam_11MeV) 
+        df_b_mapped_mirror = map_data_3d(data_bvert, det, bvert_tilt, np.asarray(((1,0,0), (0,1,0), (0,0,-1))), theta_n[d], phi_n[d], beam_11MeV)
+        df_cp_mapped = map_data_3d(data_cpvert, det, cpvert_tilt, cp_up, theta_n[d], phi_n[d], beam_11MeV)
+        df_cp_mapped_mirror = map_data_3d(data_cpvert, det, cpvert_tilt, np.asarray(((-1,0,0), (0,0,-1), (0,1,0))), theta_n[d], phi_n[d], beam_11MeV)
+
+        theta_b = np.concatenate([df_b_mapped.theta.values, df_b_mapped_mirror.theta.values])
+        theta_cp = np.concatenate([df_cp_mapped.theta.values, df_cp_mapped_mirror.theta.values])
+        theta = np.concatenate([theta_b, theta_cp])
+        phi_b = np.concatenate([df_b_mapped.phi.values, df_b_mapped_mirror.phi.values])
+        phi_cp = np.concatenate([df_cp_mapped.phi.values, df_cp_mapped_mirror.phi.values])
+        phi = np.concatenate([phi_b, phi_cp])
+
+        #theta_b = df_b_mapped.theta.values
+        #theta_cp = df_cp_mapped.theta.values
+        #theta = np.concatenate([theta_b, theta_cp])
+        #phi_b = df_b_mapped.phi.values
+        #phi_cp = df_cp_mapped.phi.values
+        #phi = np.concatenate([phi_b, phi_cp])
+
+        ql = np.concatenate([df_b_mapped.ql_mean.values, df_b_mapped_mirror.ql_mean.values, df_cp_mapped.ql_mean.values, df_cp_mapped_mirror.ql_mean.values])
+        tilts = np.concatenate([df_b_mapped.tilt.values, df_b_mapped_mirror.tilt.values, df_cp_mapped.tilt.values, df_cp_mapped_mirror.tilt.values])
+
+        # remove duplicates
+        phi_theta = np.array(zip(np.round(phi, 10), np.round(theta, 10)))
+        phi_theta, indices = np.unique(phi_theta, axis=0, return_index=True)
+        ql = ql[indices]
+        phi, theta = phi_theta.T
+
+        r = np.sqrt(1 - np.cos(theta))
+        p = np.linspace(0, max(phi), 100)
+        t = np.linspace(0, max(r), 100)
+
+        print min(phi), max(phi)
+        print min(np.rad2deg(theta)), max(np.rad2deg(theta))
+        print min(r), max(r)
+
+        phi_mesh, r_mesh = np.meshgrid(p, t)
+
+        # radial basis function
+        interp = scipy.interpolate.Rbf(phi, r, ql, function='linear', smooth=0.5, norm=polar_norm)
+        ql_int = interp(phi_mesh, r_mesh)
+
+        ax = plt.subplot(111, projection='polar')
+        ax.scatter(phi, r, 'k', size=20)
+        ax.pcolormesh(phi_mesh, r_mesh, ql_int, cmap='viridis')
+        ax.set_rmax(1.415)
+        ax.grid(True)
+        plt.show()
+
 def main():
     cwd = os.getcwd()
     p_dir = cwd + '/pickles/'
@@ -768,17 +858,17 @@ def main():
 
     ## use to check orientations
     if scatter_11:
-        scatter_check_3d(fin[0], fin[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, beam_11MeV=True)
+        scatter_check_3d(fin[0], fin[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, beam_11MeV=True, matplotlib=False)
     if scatter_4:
-        scatter_check_3d(fin[2], fin[3], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, beam_11MeV=False)
+        scatter_check_3d(fin[2], fin[3], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, beam_11MeV=False, matplotlib=False)
 
     ## heat maps with data points
     if heatmap_11:
         plot_heatmaps(fin[0], fin[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, 
-                      plot_pulse_shape=True, multiplot=False, save_multiplot=False)
+                      plot_pulse_shape=True, multiplot=False, save_multiplot=False, show_delaunay=True)
     if heatmap_4:
         plot_heatmaps(fin[2], fin[3], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=False, 
-                      plot_pulse_shape=True, multiplot=False, save_multiplot=False)
+                      plot_pulse_shape=True, multiplot=False, save_multiplot=False, show_delaunay=True)
 
     ## heat maps with fitted data
     sin_fits = ['bvert_11MeV_sin_params.p', 'cpvert_11MeV_sin_params.p', 'bvert_4MeV_sin_params.p', 'cpvert_4MeV_sin_params.p']
@@ -786,6 +876,10 @@ def main():
         plot_fitted_heatmaps(sin_fits[0], sin_fits[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, multiplot=True, save_multiplot=True)
     if fitted_heatmap_4:
         plot_fitted_heatmaps(sin_fits[2], sin_fits[3], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=False, multiplot=False, save_multiplot=False)
+
+    ## polar interpolation
+    if polar_plots:
+        polar_plot(fin[0], fin[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, beam_11MeV=True)
 
 if __name__ == '__main__':
     # check 3d scatter plots for both crystals
@@ -803,10 +897,12 @@ if __name__ == '__main__':
 
     # plot heatmaps with data points
     heatmap_11 = False
-    heatmap_4 = True
+    heatmap_4 = False
 
     # plot heatmaps with fitted data
     fitted_heatmap_11 = False
     fitted_heatmap_4 = False
+
+    polar_plots = True
 
     main()
