@@ -26,6 +26,7 @@ from scipy.interpolate import griddata
 from scipy.ndimage import gaussian_filter
 import lmfit
 import pickle
+import dask.array as da
 
 def pd_load(filename, p_dir):
     # converts pickled data into pandas DataFrame
@@ -749,7 +750,7 @@ def plot_ratios(fin, dets, p_dir, pulse_shape):
     plt.show()
 
 def polar_norm(x1, x2):
-    # norm distance function for polar coords (default is euclidean, cartesian)
+    # norm distance function for polar coords (default is euclidean, cartesian) - from wikipedia
     norm = np.sqrt(x1[1]**2 + x2[1]**2 - 2*x1[1]*x2[1]*np.cos(x1[0] - x2[0]))
     norm[np.isnan(norm)] = 0
     return norm
@@ -809,11 +810,80 @@ def polar_plot(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, 
         ql_int = interp(phi_mesh, r_mesh)
 
         ax = plt.subplot(111, projection='polar')
-        ax.scatter(phi, r, 'k', size=20)
+        ax.scatter(phi, r, c='k', s=20)
         ax.pcolormesh(phi_mesh, r_mesh, ql_int, cmap='viridis')
         ax.set_rmax(1.415)
         ax.grid(True)
         plt.show()
+
+def sph_norm(x1, x2):
+    '''Distance metric on the surface of the unit sphere (from http://jessebett.com/Radial-Basis-Function-USRA/)'''
+    norm = np.arccos((x1 * x2).sum(axis=0))
+    norm[np.isnan(norm)] = 0
+    return norm
+
+def rbf_interp_heatmap(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV, plot_pulse_shape, multiplot, save_multiplot):
+    data_bvert = pd_load(fin1, p_dir)
+    data_bvert = split_filenames(data_bvert)
+    data_cpvert = pd_load(fin2, p_dir)
+    data_cpvert = split_filenames(data_cpvert)
+
+    for d, det in enumerate(dets):       
+        print '\ndet_no =', det, 'theta_n =', theta_n[d]
+        df_b_mapped = map_data_3d(data_bvert, det, bvert_tilt, b_up, theta_n[d], phi_n[d], beam_11MeV) 
+        df_b_mapped_mirror = map_data_3d(data_bvert, det, bvert_tilt, np.asarray(((1,0,0), (0,1,0), (0,0,-1))), theta_n[d], phi_n[d], beam_11MeV)
+        df_cp_mapped = map_data_3d(data_cpvert, det, cpvert_tilt, cp_up, theta_n[d], phi_n[d], beam_11MeV)
+        df_cp_mapped_mirror = map_data_3d(data_cpvert, det, cpvert_tilt, np.asarray(((-1,0,0), (0,0,-1), (0,1,0))), theta_n[d], phi_n[d], beam_11MeV)
+
+        # convert to cartesian
+        theta_b = np.concatenate([df_b_mapped.theta.values, df_b_mapped_mirror.theta.values])
+        theta_cp = np.concatenate([df_cp_mapped.theta.values, df_cp_mapped_mirror.theta.values])
+        phi_b = np.concatenate([df_b_mapped.phi.values, df_b_mapped_mirror.phi.values])
+        phi_cp = np.concatenate([df_cp_mapped.phi.values, df_cp_mapped_mirror.phi.values])
+
+        x_b, y_b, z_b = polar_to_cartesian(theta_b, phi_b, b_up, cp_up)
+        x_cp, y_cp, z_cp = polar_to_cartesian(theta_cp, phi_cp, cp_up, cp_up)
+
+        x = np.round(np.concatenate((x_b, x_cp)), 12)
+        y = np.round(np.concatenate((y_b, y_cp)), 12)
+        z = np.round(np.concatenate((z_b, z_cp)), 12)
+        ql = np.concatenate([df_b_mapped.ql_mean.values, df_b_mapped_mirror.ql_mean.values, df_cp_mapped.ql_mean.values, df_cp_mapped_mirror.ql_mean.values])
+        tilts = np.concatenate([df_b_mapped.tilt.values, df_b_mapped_mirror.tilt.values, df_cp_mapped.tilt.values, df_cp_mapped_mirror.tilt.values])
+
+        # remove repeated points
+        xyz = np.array(zip(x, y, z))
+        xyz_u, indices = np.unique(xyz, axis=0, return_index=True)
+        ql = ql[indices]
+        tilts = tilts[indices]
+        x, y, z = xyz_u.T
+
+        # make mesh
+        t = np.linspace(0, np.pi, 500)
+        p = np.linspace(0, 2*np.pi, 500)
+        t_mesh, p_mesh = np.meshgrid(t, p)
+        x_mesh, y_mesh, z_mesh = polar_to_cartesian(t_mesh, p_mesh, b_up, cp_up)
+
+        #funcs = ['multiquadric', 'inverse', 'gaussian', 'linear', 'cubic', 'quintic', 'thin_plate']
+        funcs = ['cubic']
+        for func in funcs:
+            rbf_interp = scipy.interpolate.Rbf(x, y, z, ql, function=func, norm=sph_norm, smooth=0.1)
+
+            # use dask to chunk and thread data to limit memory usage
+            n1 = x_mesh.shape[1]
+            ix = da.from_array(x_mesh, chunks=(1, n1))
+            iy = da.from_array(y_mesh, chunks=(1, n1))
+            iz = da.from_array(z_mesh, chunks=(1, n1))
+            iq = da.map_blocks(rbf_interp, ix, iy, iz)
+            ql_int = iq.compute()
+
+            fig = mlab.figure(size=(400*2, 350*2)) 
+            pts = mlab.points3d(x, y, z, ql, colormap='viridis', scale_mode='none', scale_factor=0.03)
+            mesh = mlab.mesh(x_mesh, y_mesh, z_mesh, scalars=ql_int, colormap='viridis')
+            # wireframe
+            #mlab.mesh(x_mesh, y_mesh, z_mesh, color=(0.5, 0.5, 0.5), representation='wireframe')
+            mlab.axes(pts, xlabel='a', ylabel='b', zlabel='c\'')
+            mlab.colorbar(mesh, orientation='vertical')
+        mlab.show()
 
 def main():
     cwd = os.getcwd()
@@ -881,6 +951,10 @@ def main():
     if polar_plots:
         polar_plot(fin[0], fin[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, beam_11MeV=True)
 
+    if rbf_interp_heatmaps:
+        rbf_interp_heatmap(fin[0], fin[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, 
+                      plot_pulse_shape=False, multiplot=False, save_multiplot=False)
+
 if __name__ == '__main__':
     # check 3d scatter plots for both crystals
     scatter_11 = False
@@ -903,6 +977,10 @@ if __name__ == '__main__':
     fitted_heatmap_11 = False
     fitted_heatmap_4 = False
 
-    polar_plots = True
+    # polar plots
+    polar_plots = False
+
+    # rbf interpolated heatmaps
+    rbf_interp_heatmaps = True
 
     main()

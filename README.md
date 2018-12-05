@@ -55,4 +55,7 @@
     * added rotation angle plotting to scatter_check_3d; includes plotting with mayavi or matplotlib (no text)
 
 * 12/4/18
-    * add polar plots of data with rbf interpolation
+    * added polar plots of data with rbf interpolation
+
+* 12/5/18
+    * implemented rbf interpolation on spherical data - looks ok
