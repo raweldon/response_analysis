@@ -71,3 +71,5 @@
         * qs/ql --> 1-qs/ql
         * updated pulse shape ratio plots to include basline uncert (uncomment code to use) 
             * rough estimate, representative not accurate
+    * added pulse shape analysis to multiplot
+    * updated plot_ratios

@@ -116,7 +116,7 @@ def get_max_ql_per_det(det_data, dets, tilts):
             max_col = tilt_df.iloc[idxmax]
             print '{:^5} {:>8}'.format(max_col.tilt, max_col.ql_mean)
 
-def tilt_check(det_data, dets, tilts, pickle_name, p_dir, beam_11MeV, print_max_ql, get_a_data, pulse_shape, delayed, prompt, show_plots, save_plots, save_pickle):
+def tilt_check(det_data, dets, tilts, pickle_name, cwd, p_dir, beam_11MeV, print_max_ql, get_a_data, pulse_shape, delayed, prompt, show_plots, save_plots, save_pickle):
     ''' Use to check lo, pulse shape (pulse_shape=True), or delayed pulse (delayed=True) for a given det and tilt
         Data is fitted with sinusoids
         Sinusoid fit parameters can be saved for later use by setting save_pickle=True
@@ -164,7 +164,7 @@ def tilt_check(det_data, dets, tilts, pickle_name, p_dir, beam_11MeV, print_max_
                 ql = det_df.ql_mean.values
                 qs = det_df.qs_mean.values
                 ps = 1 - qs/ql
-                ps_uncert = [ps_unc[d]]*len(ql)
+                ps_uncert = [ps_unc[d]]*len(ql) # from daq2:/home/radians/raweldon/tunl.2018.1_analysis/peak_localization/pulse_shape_get_hotspots.py
                 det_df = det_df.assign(ps = ps)
                 det_df = det_df.assign(ps_uncert = ps_uncert)
 
@@ -241,9 +241,9 @@ def tilt_check(det_data, dets, tilts, pickle_name, p_dir, beam_11MeV, print_max_
                 if save_plots:
                     if d > 5:
                         if pulse_shape:
-                            plt.savefig(name + '_pulse_shape.png')
+                            plt.savefig(cwd + '/figures/tilt_plots/pulse_shape/' + name + '_pulse_shape.png')
                         else:
-                            plt.savefig(name + '.png')
+                            plt.savefig(cwd + '/figures/tilt_plots/' + name + '.png')
         if show_plots:
             plt.show()
 
@@ -405,35 +405,41 @@ def scatter_check_3d(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, the
             mlab.title('det ' + str(det))
             mlab.show()
 
-def heatmap_multiplot(x, y, z, data, theta_n, d, cwd, save_multiplot, fitted):
+def heatmap_multiplot(x, y, z, data, theta_n, d, cwd, save_multiplot, beam_11MeV, fitted):
     #            a   b  c'  nice 
-    azimuth =   [180,  90, 0, 205]
-    elevation = [90, 90, 0, 75]
-    if fitted:
-        names = ['40deg_11MeV_a_fitted', '40deg_11MeV_b_fitted', '40deg_11MeV_c\'_fitted', '40deg_11MeV_nice_fitted']
+    plot_angle = 70
+    if beam_11MeV:
+        beam = '11MeV'
     else:
-        names = ['40deg_11MeV_a', '40deg_11MeV_b', '40deg_11MeV_c\'', '40deg_11MeV_nice']
-
-    max_idx = np.argmax(data)
-    print ' max = ', data[max_idx]
-    for i, (az, el) in enumerate(zip(azimuth, elevation)):
-        fig = mlab.figure(size=(400*2, 350*2)) 
-        pts = mlab.points3d(x, y, z, data, colormap='viridis', scale_mode='none', scale_factor=0.03)
+        beam = '4MeV'
+    if theta_n[d] == plot_angle:
+        azimuth =   [180,  90, 0, 205]
+        elevation = [90, 90, 0, 75]
         if fitted:
-            mlab.points3d(x[max_idx], y[max_idx], z[max_idx], data[max_idx], color=(1,0,0), scale_mode='none', scale_factor=0.03)
-        tri = mlab.pipeline.delaunay3d(pts)
-        tri_smooth = mlab.pipeline.poly_data_normals(tri) # smooths delaunay triangulation mesh
-        surf = mlab.pipeline.surface(tri_smooth, colormap='viridis')
-        mlab.axes(pts, xlabel='a', ylabel='b', zlabel='c\'')
-        mlab.colorbar(surf, orientation='vertical') 
-        mlab.view(azimuth=az, elevation=el, distance=7.5, figure=fig)
-        if save_multiplot:
-            if theta_n[d] == 40:
+            names = [str(plot_angle) + 'deg_' + beam + '_a_fitted', str(plot_angle) + 'deg_' + beam + '_b_fitted', str(plot_angle) + 
+                     'deg_' + beam + '_c\'_fitted', str(plot_angle) + 'deg_' + beam + '_nice_fitted']
+        else:
+            names = [str(plot_angle) + 'deg_' + beam + '_a', str(plot_angle) + 'deg_' + beam + '_b', str(plot_angle) + 'deg_' + beam + '_c\'', str(plot_angle) + 'deg_' + beam + '_nice']
+
+        max_idx = np.argmax(data)
+        print ' max = ', data[max_idx]
+        for i, (az, el) in enumerate(zip(azimuth, elevation)):
+            fig = mlab.figure(size=(400*2, 350*2)) 
+            pts = mlab.points3d(x, y, z, data, colormap='viridis', scale_mode='none', scale_factor=0.03)
+            if fitted:
+                mlab.points3d(x[max_idx], y[max_idx], z[max_idx], data[max_idx], color=(1,0,0), scale_mode='none', scale_factor=0.03)
+            tri = mlab.pipeline.delaunay3d(pts)
+            tri_smooth = mlab.pipeline.poly_data_normals(tri) # smooths delaunay triangulation mesh
+            surf = mlab.pipeline.surface(tri_smooth, colormap='viridis')
+            mlab.axes(pts, xlabel='a', ylabel='b', zlabel='c\'')
+            mlab.colorbar(surf, orientation='vertical') 
+            mlab.view(azimuth=az, elevation=el, distance=7.5, figure=fig)
+            if save_multiplot:
                 print theta_n[d], names[i]
                 mlab.savefig(cwd + '/' + names[i] + '.png')
-                print names[i] + '.png saved'
-            mlab.clf()
-            mlab.close()
+                print 'saved to' + cwd + '/' + names[i] + '.png'
+                mlab.clf()
+                mlab.close()      
 
 def heatmap_singleplot(x, y, z, data, tilts, name, show_delaunay):
     max_idx = np.argmax(data)
@@ -510,10 +516,11 @@ def plot_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_
         # points3d with delaunay filter - works best!!
         ## use for nice looking plots
         if multiplot:
-            heatmap_multiplot(x, y, z, ql, theta_n, d, cwd, save_multiplot, fitted=False)
+            heatmap_multiplot(x, y, z, ql, theta_n, d, cwd + '/figures/3d_lo', save_multiplot, beam_11MeV, fitted=False)
             if plot_pulse_shape:
-                heatmap_multiplot(x, y, z, ps, theta_n, d, cwd, save_multiplot, fitted=False)
-            mlab.show()
+                heatmap_multiplot(x, y, z, ps, theta_n, d, cwd + '/figures/3d_pulse_shape', save_multiplot, beam_11MeV, fitted=False)
+            if not save_multiplot:
+                mlab.show()
 
         ## use for analysis 
         else:
@@ -595,7 +602,7 @@ def plot_fitted_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up,
             mlab.view(azimuth=0, elevation=-90, distance=7.5, figure=fig)            
             mlab.show()        
 
-def compare_a_axis_recoils(fin, dets, p_dir, plot_by_det, save_plots):
+def compare_a_axis_recoils(fin, dets, cwd, p_dir, plot_by_det, save_plots):
     for f in fin:
         if '11' in f:
             beam_11MeV = True
@@ -608,7 +615,7 @@ def compare_a_axis_recoils(fin, dets, p_dir, plot_by_det, save_plots):
 
         data = pd_load(f, p_dir)
         data = split_filenames(data)
-        a_axis_df, cp_b_axes_df = tilt_check(data, dets, tilts, f, p_dir, beam_11MeV, 
+        a_axis_df, cp_b_axes_df = tilt_check(data, dets, tilts, f, cwd, p_dir, beam_11MeV, 
                                              print_max_ql=False, get_a_data=True, pulse_shape=False, delayed=False, prompt=False, show_plots=False, save_plots=False, save_pickle=False)
 
         # plot each det separately
@@ -671,7 +678,7 @@ def compare_a_axis_recoils(fin, dets, p_dir, plot_by_det, save_plots):
             plt.title(f)
     plt.show()
 
-def plot_ratios(fin, dets, p_dir, pulse_shape, plot_fit_ratio):
+def plot_ratios(fin, dets, cwd, p_dir, pulse_shape, plot_fit_ratio):
     ''' Plots a/c' and a/b ql or pulse shape ratios
         Set pulse_shape=True for pulse shape ratios
         Uses tilt_check function to get data from dataframes
@@ -679,6 +686,7 @@ def plot_ratios(fin, dets, p_dir, pulse_shape, plot_fit_ratio):
     for i, f in enumerate(fin):
         label_fit = ['', '', '', 'fit ratios']
         label = ['L$_a$/L$_c\'$', 'L$_a$/L$_b$', '', '']
+        label_pat = ['', '', '', 'Schuster ratios']
         if '11' in f:
             beam_11MeV = True
             angles = [70, 60, 50, 40, 30, 20, 20, 30, 40, 50, 60, 70]
@@ -702,7 +710,7 @@ def plot_ratios(fin, dets, p_dir, pulse_shape, plot_fit_ratio):
 
         data = pd_load(f, p_dir)
         data = split_filenames(data)  
-        a_axis_df, cp_b_axes_df = tilt_check(data, dets, tilts, f, p_dir, beam_11MeV, 
+        a_axis_df, cp_b_axes_df = tilt_check(data, dets, tilts, f, cwd, p_dir, beam_11MeV, 
                                              print_max_ql=False, get_a_data=True, pulse_shape=pulse_shape, delayed=False, prompt=False, show_plots=False, save_plots=False, save_pickle=False)
 
         if beam_11MeV:
@@ -748,14 +756,20 @@ def plot_ratios(fin, dets, p_dir, pulse_shape, plot_fit_ratio):
             # plot measured a/cp and a/b ratios 
             plt.errorbar(p_erg, ratio, yerr=uncert, ecolor='black', markerfacecolor='None', fmt=shape, 
                          markeredgecolor=color, markeredgewidth=1, markersize=10, capsize=1, label=label[i])
+            # schuster ratios 2.5
+            pat_ratios = [1.071, 1.100, 1.078, 1.066, 1.034, 1.058, 1.039, 1.048]     
+            pat_ergs = [14.1, 14.1, 14.1, 14.1, 2.5, 2.5, 2.5, 2.5]        
+            plt.errorbar(pat_ergs, pat_ratios, ecolor='black', markerfacecolor='None', fmt='x', 
+                         markeredgecolor='k', markeredgewidth=1, markersize=7, capsize=1, label=label_pat[i])            
             # plot fitted data
             if plot_fit_ratio:
                 plt.errorbar(p_erg, fit_ratio, ecolor='black', markerfacecolor='None', fmt='s', 
                              markeredgecolor='g', markeredgewidth=1, markersize=10, capsize=1, label=label_fit[i])
-            xmin, xmax = plt.xlim(0, 11)
+            xmin, xmax = plt.xlim(0, 14.5)
             plt.plot(np.linspace(xmin, xmax, 10), [1.0]*10, 'k--')            
             plt.ylabel('psd parameter ratio')
-            plt.ylim(0.90, 1.1)
+            plt.xlabel('proton recoil energy (MeV)')
+            plt.ylim(0.91, 1.12)
             plt.legend(loc=4)
         else:
             plt.figure(0)
@@ -846,7 +860,7 @@ def sph_norm(x1, x2):
     norm[np.isnan(norm)] = 0
     return norm
 
-def rbf_interp_heatmap(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, beam_11MeV, plot_pulse_shape, multiplot, save_multiplot):
+def rbf_interp_heatmap(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV, plot_pulse_shape, multiplot, save_multiplot):
     data_bvert = pd_load(fin1, p_dir)
     data_bvert = split_filenames(data_bvert)
     data_cpvert = pd_load(fin2, p_dir)
@@ -930,15 +944,15 @@ def main():
 
             data = pd_load(f, p_dir)
             data = split_filenames(data)
-            tilt_check(data, dets, tilts, f, p_dir, beam_11MeV, print_max_ql=False, get_a_data=False, pulse_shape=True, delayed=False, prompt=False, show_plots=True, save_plots=False, save_pickle=False)
+            tilt_check(data, dets, tilts, f, cwd, p_dir, beam_11MeV, print_max_ql=False, get_a_data=False, pulse_shape=True, delayed=False, prompt=False, show_plots=True, save_plots=True, save_pickle=False)
 
     # comparison of ql for recoils along the a-axis
     if compare_a_axes:
-        compare_a_axis_recoils(fin, dets, p_dir, plot_by_det=True, save_plots=False)
+        compare_a_axis_recoils(fin, dets, cwd, p_dir, plot_by_det=True, save_plots=False)
 
     # plot ratios
     if ratios_plot:
-        plot_ratios(fin, dets, p_dir, pulse_shape=True, plot_fit_ratio=False)
+        plot_ratios(fin, dets, cwd, p_dir, pulse_shape=True, plot_fit_ratio=False)
     
     # 3d plotting
     theta_n = [70, 60, 50, 40, 30, 20, 20, 30, 40, 50, 60, 70]
@@ -959,10 +973,10 @@ def main():
     ## heat maps with data points
     if heatmap_11:
         plot_heatmaps(fin[0], fin[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, 
-                      plot_pulse_shape=True, multiplot=False, save_multiplot=False, show_delaunay=True)
+                      plot_pulse_shape=True, multiplot=False, save_multiplot=False, show_delaunay=False)
     if heatmap_4:
         plot_heatmaps(fin[2], fin[3], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=False, 
-                      plot_pulse_shape=True, multiplot=False, save_multiplot=False, show_delaunay=True)
+                      plot_pulse_shape=True, multiplot=False, save_multiplot=False, show_delaunay=False)
 
     ## heat maps with fitted data
     sin_fits = ['bvert_11MeV_sin_params.p', 'cpvert_11MeV_sin_params.p', 'bvert_4MeV_sin_params.p', 'cpvert_4MeV_sin_params.p']
@@ -975,9 +989,9 @@ def main():
     if polar_plots:
         polar_plot(fin[0], fin[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, beam_11MeV=True)
 
+    ## rbf interpolation
     if rbf_interp_heatmaps:
-        rbf_interp_heatmap(fin[0], fin[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, 
-                      plot_pulse_shape=False, multiplot=False, save_multiplot=False)
+        rbf_interp_heatmap(fin[0], fin[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, plot_pulse_shape=True, multiplot=False, save_multiplot=False)
 
 if __name__ == '__main__':
     # check 3d scatter plots for both crystals
@@ -991,7 +1005,7 @@ if __name__ == '__main__':
     compare_a_axes = False
 
     # plots a/c' and a/b ql or pulse shape ratios from 0deg measurements
-    ratios_plot = True
+    ratios_plot = False
 
     # plot heatmaps with data points
     heatmap_11 = False
@@ -1005,6 +1019,6 @@ if __name__ == '__main__':
     polar_plots = False
 
     # rbf interpolated heatmaps
-    rbf_interp_heatmaps = False
+    rbf_interp_heatmaps = True
 
     main()
