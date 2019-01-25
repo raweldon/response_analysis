@@ -65,3 +65,9 @@
         * Pat: short gate near end of pulse
         * Us: short gate at beginning of pulse
     * May have found that we did save pulse shape data -- we did
+
+* 1/25/2019
+    * updated pulse shape analysis to be comparable to Patricia
+        * qs/ql --> 1-qs/ql
+        * updated pulse shape ratio plots to include basline uncert (uncomment code to use) 
+            * rough estimate, representative not accurate

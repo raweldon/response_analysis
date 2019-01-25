@@ -770,8 +770,7 @@ def plot_ratios(fin, dets, p_dir, pulse_shape, plot_fit_ratio):
             plt.plot(np.linspace(xmin, xmax, 10), [1.0]*10, 'k--')
             plt.ylabel('light output ratio')
             plt.legend()
-            plt.xlabel('proton recoil energy (MeV)')
-      
+            plt.xlabel('proton recoil energy (MeV)')     
     plt.show()
 
 def polar_norm(x1, x2):
