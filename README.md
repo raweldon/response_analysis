@@ -73,3 +73,4 @@
             * rough estimate, representative not accurate
     * added pulse shape analysis to multiplot
     * updated plot_ratios
+    * new branch for testing minimization
