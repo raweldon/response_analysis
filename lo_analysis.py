@@ -22,7 +22,6 @@ from mayavi import mlab
 import pylab as plt
 import scipy
 from scipy.spatial import Delaunay
-from scipy.interpolate import griddata
 from scipy.ndimage import gaussian_filter
 import lmfit
 import pickle
@@ -128,6 +127,11 @@ def tilt_check(det_data, dets, tilts, pickle_name, p_dir, beam_11MeV, print_max_
 
     if pulse_shape:
         print '\nANALYZING PULSE SHAPE DATA'
+        # pulse shape uncertainties, from daq2:/home/radians/raweldon/tunl.2018.1_analysis/peak_localization/pulse_shape_get_hotspots.py
+        if beam_11MeV:
+            ps_unc = (0.0017, 0.0014, 0.0013, 0.0012, 0.0013, 0.0019, 0.0019, 0.0013, 0.0012, 0.0012, 0.0013, 0.0018)
+        else:
+            ps_unc = (0.0015, 0.0015, 0.0015, 0.0015,  0.002, 0.0036, 0.0036, 0.0021, 0.0016, 0.0015, 0.0015, 0.0015)
     elif delayed:
         print '\nANALYZING QS'
     elif prompt:
@@ -159,12 +163,9 @@ def tilt_check(det_data, dets, tilts, pickle_name, p_dir, beam_11MeV, print_max_
                 # add pulse shape values and uncert to dataframe
                 ql = det_df.ql_mean.values
                 qs = det_df.qs_mean.values
-                ps = qs/ql
+                ps = 1 - qs/ql
+                ps_uncert = [ps_unc[d]]*len(ql)
                 det_df = det_df.assign(ps = ps)
-
-                ql_uncert = det_df.ql_abs_uncert.values
-                qs_uncert = det_df.qs_abs_uncert.values
-                ps_uncert = np.sqrt(ps**2 * ((ql_uncert/ql)**2 + (qs_uncert/qs)**2)) # ??????
                 det_df = det_df.assign(ps_uncert = ps_uncert)
 
                 data = det_df.ps
@@ -504,20 +505,21 @@ def plot_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_
         if plot_pulse_shape:
             qs = np.concatenate([df_b_mapped.qs_mean.values, df_b_mapped_mirror.qs_mean.values, df_cp_mapped.qs_mean.values, df_cp_mapped_mirror.qs_mean.values])
             qs = qs[indices]
+            ps = [1 - a/b for a, b in zip(qs, ql)]
 
         # points3d with delaunay filter - works best!!
         ## use for nice looking plots
         if multiplot:
             heatmap_multiplot(x, y, z, ql, theta_n, d, cwd, save_multiplot, fitted=False)
             if plot_pulse_shape:
-                heatmap_multiplot(x, y, z, qs/ql, theta_n, d, cwd, save_multiplot, fitted=False)
+                heatmap_multiplot(x, y, z, ps, theta_n, d, cwd, save_multiplot, fitted=False)
             mlab.show()
 
         ## use for analysis 
         else:
             heatmap_singleplot(x, y, z, ql, tilts, 'ql', show_delaunay)
             if plot_pulse_shape:
-                heatmap_singleplot(x, y, z, qs/ql, tilts, 'qs/ql', show_delaunay)
+                heatmap_singleplot(x, y, z, ps, tilts, 'qs/ql', show_delaunay)
             mlab.show()
 
 def map_fitted_data_3d(data, det, tilts, crystal_orientation, theta_neutron, phi_neutron, beam_11MeV):
@@ -669,12 +671,11 @@ def compare_a_axis_recoils(fin, dets, p_dir, plot_by_det, save_plots):
             plt.title(f)
     plt.show()
 
-def plot_ratios(fin, dets, p_dir, pulse_shape):
+def plot_ratios(fin, dets, p_dir, pulse_shape, plot_fit_ratio):
     ''' Plots a/c' and a/b ql or pulse shape ratios
         Set pulse_shape=True for pulse shape ratios
         Uses tilt_check function to get data from dataframes
     '''
-
     for i, f in enumerate(fin):
         label_fit = ['', '', '', 'fit ratios']
         label = ['L$_a$/L$_c\'$', 'L$_a$/L$_b$', '', '']
@@ -682,10 +683,14 @@ def plot_ratios(fin, dets, p_dir, pulse_shape):
             beam_11MeV = True
             angles = [70, 60, 50, 40, 30, 20, 20, 30, 40, 50, 60, 70]
             p_erg = 11.325*np.sin(np.deg2rad(angles))**2
+            #ps_baseline_uncert = (0.01, 0.01, 0.02, 0.03, 0.08, 0.25, 0.25, 0.08, 0.03, 0.02, 0.01, 0.01) # ql uncer
+            ps_baseline_uncert = (0.001, 0.001, 0.001, 0.002, 0.005, 0.016, 0.016, 0.005, 0.002, 0.001, 0.001, 0.001) # qs uncer
         else:
             beam_11MeV = False
             angles = [60, 40, 20, 30, 50, 70]
             p_erg = 4.825*np.sin(np.deg2rad(angles))**2
+            #ps_baseline_uncert = (0.01, 0.01, 0.02, 0.04, 0.1, 0.3, 0.3, 0.1, 0.04, 0.02, 0.01, 0.01) # ql uncert
+            ps_baseline_uncert = (0.001, 0.001, 0.002, 0.003, 0.008, 0.027, 0.026, 0.008, 0.003, 0.002, 0.001) # qs uncert
         if 'bvert' in f:
             tilts = [0, 45, -45, 30, -30, 15, -15]
             tilts = [0]
@@ -698,7 +703,7 @@ def plot_ratios(fin, dets, p_dir, pulse_shape):
         data = pd_load(f, p_dir)
         data = split_filenames(data)  
         a_axis_df, cp_b_axes_df = tilt_check(data, dets, tilts, f, p_dir, beam_11MeV, 
-                                            print_max_ql=False, get_a_data=True, pulse_shape=pulse_shape, delayed=False, prompt=False, show_plots=False, save_plots=False, save_pickle=False)
+                                             print_max_ql=False, get_a_data=True, pulse_shape=pulse_shape, delayed=False, prompt=False, show_plots=False, save_plots=False, save_pickle=False)
 
         if beam_11MeV:
             a_ql = a_axis_df.ql.iloc[np.where(a_axis_df.tilt == 0)].values
@@ -709,11 +714,15 @@ def plot_ratios(fin, dets, p_dir, pulse_shape):
             cp_b_fit_ql = cp_b_axes_df.fit_ql.iloc[np.where(cp_b_axes_df.tilt == 0)].values
             ratio = a_ql/cp_b_ql
             fit_ratio = a_fit_ql/cp_b_fit_ql
+            baseline_unc_a = a_ql*ps_baseline_uncert
+            baseline_unc_cp = cp_b_ql*ps_baseline_uncert
+            #uncert = np.sqrt(ratio**2*(((a_uncert + baseline_unc_a)/a_ql)**2 + ((cp_b_uncert + baseline_unc_cp)/cp_b_ql)**2)) # includes baseline uncert
             uncert = np.sqrt(ratio**2 * ((a_uncert/a_ql)**2 + (cp_b_uncert/cp_b_ql)**2))
+            shape = 'o'
         else:
             # account for skipped detectors with 4 MeV beam measurements
             ratio, uncert, fit_ratio = [], [], []
-            for det in a_axis_df.det.values:
+            for d, det in enumerate(a_axis_df.det.values):
                 if det in cp_b_axes_df.det.values:
                     a_ql = a_axis_df.ql.iloc[np.where(a_axis_df.det == det)].values
                     a_uncert = a_axis_df.abs_uncert.iloc[np.where(a_axis_df.det == det)].values
@@ -722,31 +731,47 @@ def plot_ratios(fin, dets, p_dir, pulse_shape):
                     cp_b_uncert = cp_b_axes_df.abs_uncert.iloc[np.where(cp_b_axes_df.det == det)].values
                     cp_b_fit_ql = cp_b_axes_df.fit_ql.iloc[np.where(cp_b_axes_df.det == det)].values
                     rat = a_ql/cp_b_ql
-                    unc = np.sqrt(rat**2 * ((a_uncert/a_ql)**2 + (cp_b_uncert/cp_b_ql)**2))
+                    baseline_unc_a = a_ql*ps_baseline_uncert[d]
+                    baseline_unc_cp = cp_b_ql*ps_baseline_uncert[d]
+                    #unc = np.sqrt(rat**2*(((a_uncert + baseline_unc_a)/a_ql)**2 + ((cp_b_uncert + baseline_unc_cp)/cp_b_ql)**2)) # includes baseline uncert
+                    unc = np.sqrt(rat**2 * ((a_uncert/a_ql)**2 + (cp_b_uncert/cp_b_ql)**2)) # no baseline uncert
                     rat_fit = a_fit_ql/cp_b_fit_ql
                     ratio.append(rat)
                     uncert.append(unc)
                     fit_ratio.append(rat_fit)
+                    shape = '^'
                 else:
                     continue
 
-        plt.figure(0)
-        # plot measured a/cp and a/b ratios 
-        plt.errorbar(p_erg, ratio, yerr=uncert, ecolor='black', markerfacecolor='None', fmt='o', 
-                     markeredgecolor=color, markeredgewidth=1, markersize=10, capsize=1, label=label[i])
-        # plot fitted data
-        plt.errorbar(p_erg, fit_ratio, ecolor='black', markerfacecolor='None', fmt='^', 
-                     markeredgecolor='g', markeredgewidth=1, markersize=10, capsize=1, label=label_fit[i])
-        xmin, xmax = plt.xlim(0, 11)
-        plt.plot(np.linspace(xmin, xmax, 10), [1.0]*10, 'k--')
         if pulse_shape:
+            plt.figure(0)
+            # plot measured a/cp and a/b ratios 
+            plt.errorbar(p_erg, ratio, yerr=uncert, ecolor='black', markerfacecolor='None', fmt=shape, 
+                         markeredgecolor=color, markeredgewidth=1, markersize=10, capsize=1, label=label[i])
+            # plot fitted data
+            if plot_fit_ratio:
+                plt.errorbar(p_erg, fit_ratio, ecolor='black', markerfacecolor='None', fmt='s', 
+                             markeredgecolor='g', markeredgewidth=1, markersize=10, capsize=1, label=label_fit[i])
+            xmin, xmax = plt.xlim(0, 11)
+            plt.plot(np.linspace(xmin, xmax, 10), [1.0]*10, 'k--')            
             plt.ylabel('psd parameter ratio')
-            plt.ylim(0.95, 1.1)
+            plt.ylim(0.90, 1.1)
+            plt.legend(loc=4)
         else:
+            plt.figure(0)
+            # plot measured a/cp and a/b ratios 
+            plt.errorbar(p_erg, ratio, yerr=uncert, ecolor='black', markerfacecolor='None', fmt=shape, 
+                         markeredgecolor=color, markeredgewidth=1, markersize=10, capsize=1, label=label[i])
+            # plot fitted data
+            if plot_fit_ratio:
+                plt.errorbar(p_erg, fit_ratio, ecolor='black', markerfacecolor='None', fmt='s', 
+                             markeredgecolor='g', markeredgewidth=1, markersize=10, capsize=1, label=label_fit[i])
+            xmin, xmax = plt.xlim(0, 11)
+            plt.plot(np.linspace(xmin, xmax, 10), [1.0]*10, 'k--')
             plt.ylabel('light output ratio')
-        plt.xlabel('proton recoil energy (MeV)')
-        plt.legend()
-
+            plt.legend()
+            plt.xlabel('proton recoil energy (MeV)')
+      
     plt.show()
 
 def polar_norm(x1, x2):
@@ -822,7 +847,7 @@ def sph_norm(x1, x2):
     norm[np.isnan(norm)] = 0
     return norm
 
-def rbf_interp_heatmap(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV, plot_pulse_shape, multiplot, save_multiplot):
+def rbf_interp_heatmap(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, beam_11MeV, plot_pulse_shape, multiplot, save_multiplot):
     data_bvert = pd_load(fin1, p_dir)
     data_bvert = split_filenames(data_bvert)
     data_cpvert = pd_load(fin2, p_dir)
@@ -863,7 +888,7 @@ def rbf_interp_heatmap(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, t
         t_mesh, p_mesh = np.meshgrid(t, p)
         x_mesh, y_mesh, z_mesh = polar_to_cartesian(t_mesh, p_mesh, b_up, cp_up)
 
-        #funcs = ['multiquadric', 'inverse', 'gaussian', 'linear', 'cubic', 'quintic', 'thin_plate']
+        #funcs = ['multiquadric', 'inverse', 'gaussian', 'linear', 'cubic', 'quintic', 'thin_plate'] # multiquadric, inverse, cubic, and thin_plate all look good
         funcs = ['cubic']
         for func in funcs:
             rbf_interp = scipy.interpolate.Rbf(x, y, z, ql, function=func, norm=sph_norm, smooth=0.1)
@@ -906,7 +931,7 @@ def main():
 
             data = pd_load(f, p_dir)
             data = split_filenames(data)
-            tilt_check(data, dets, tilts, f, p_dir, beam_11MeV, print_max_ql=False, get_a_data=False, pulse_shape=True, delayed=False, prompt=False, show_plots=False, save_plots=False, save_pickle=False)
+            tilt_check(data, dets, tilts, f, p_dir, beam_11MeV, print_max_ql=False, get_a_data=False, pulse_shape=True, delayed=False, prompt=False, show_plots=True, save_plots=False, save_pickle=False)
 
     # comparison of ql for recoils along the a-axis
     if compare_a_axes:
@@ -914,7 +939,7 @@ def main():
 
     # plot ratios
     if ratios_plot:
-        plot_ratios(fin, dets, p_dir, pulse_shape=True)
+        plot_ratios(fin, dets, p_dir, pulse_shape=True, plot_fit_ratio=False)
     
     # 3d plotting
     theta_n = [70, 60, 50, 40, 30, 20, 20, 30, 40, 50, 60, 70]
@@ -967,7 +992,7 @@ if __name__ == '__main__':
     compare_a_axes = False
 
     # plots a/c' and a/b ql or pulse shape ratios from 0deg measurements
-    ratios_plot = False
+    ratios_plot = True
 
     # plot heatmaps with data points
     heatmap_11 = False
@@ -981,6 +1006,6 @@ if __name__ == '__main__':
     polar_plots = False
 
     # rbf interpolated heatmaps
-    rbf_interp_heatmaps = True
+    rbf_interp_heatmaps = False
 
     main()

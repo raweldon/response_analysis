@@ -59,3 +59,9 @@
 
 * 12/5/18
     * implemented rbf interpolation on spherical data - looks ok
+
+* 12/11/18
+    * pulse shape is reverse of what was reported by Patricia due to difference in psd calculation
+        * Pat: short gate near end of pulse
+        * Us: short gate at beginning of pulse
+    * May have found that we did save pulse shape data -- we did
