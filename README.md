@@ -1,3 +1,6 @@
+# NOTE: this branch contains all data from original edge calibrations
+
+
 # response_analysis notes
 
 * 11/13/2018     
