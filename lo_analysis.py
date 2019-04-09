@@ -581,7 +581,7 @@ def plot_fitted_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up,
         x, y, z = xyz.T
 
         if multiplot:
-            heatmap_multiplot(x, y, z, ql, theta_n, d, cwd, save_multiplot, fitted=True)
+            heatmap_multiplot(x, y, z, ql, theta_n, d, cwd, save_multiplot, beam_11MeV, fitted=True)
             if save_multiplot:
                 continue
             mlab.show()
@@ -904,7 +904,7 @@ def rbf_interp_heatmap(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, t
         #funcs = ['multiquadric', 'inverse', 'gaussian', 'linear', 'cubic', 'quintic', 'thin_plate'] # multiquadric, inverse, cubic, and thin_plate all look good
         funcs = ['cubic']
         for func in funcs:
-            rbf_interp = scipy.interpolate.Rbf(x, y, z, ql, function=func, norm=sph_norm, smooth=0.1)
+            rbf_interp = scipy.interpolate.Rbf(x, y, z, ql, function=func, norm=sph_norm, smooth=0.) # smooth doesn't really make it better
 
             # use dask to chunk and thread data to limit memory usage
             n1 = x_mesh.shape[1]
@@ -913,6 +913,9 @@ def rbf_interp_heatmap(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, t
             iz = da.from_array(z_mesh, chunks=(1, n1))
             iq = da.map_blocks(rbf_interp, ix, iy, iz)
             ql_int = iq.compute()
+
+            #for xq, yq, zq, qq in zip(x_mesh, y_mesh, z_mesh, ql_int):
+            #    print xq, yq, zq, qq
 
             fig = mlab.figure(size=(400*2, 350*2)) 
             pts = mlab.points3d(x, y, z, ql, colormap='viridis', scale_mode='none', scale_factor=0.03)
@@ -944,7 +947,8 @@ def main():
 
             data = pd_load(f, p_dir)
             data = split_filenames(data)
-            tilt_check(data, dets, tilts, f, cwd, p_dir, beam_11MeV, print_max_ql=False, get_a_data=False, pulse_shape=True, delayed=False, prompt=False, show_plots=True, save_plots=True, save_pickle=False)
+            tilt_check(data, dets, tilts, f, cwd, p_dir, beam_11MeV, print_max_ql=False, get_a_data=False, pulse_shape=False, 
+                       delayed=False, prompt=False, show_plots=True, save_plots=False, save_pickle=True)
 
     # comparison of ql for recoils along the a-axis
     if compare_a_axes:
@@ -973,7 +977,7 @@ def main():
     ## heat maps with data points
     if heatmap_11:
         plot_heatmaps(fin[0], fin[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, 
-                      plot_pulse_shape=True, multiplot=False, save_multiplot=False, show_delaunay=False)
+                      plot_pulse_shape=True, multiplot=False, save_multiplot=False, show_delaunay=True)
     if heatmap_4:
         plot_heatmaps(fin[2], fin[3], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=False, 
                       plot_pulse_shape=True, multiplot=False, save_multiplot=False, show_delaunay=False)
@@ -981,7 +985,7 @@ def main():
     ## heat maps with fitted data
     sin_fits = ['bvert_11MeV_sin_params.p', 'cpvert_11MeV_sin_params.p', 'bvert_4MeV_sin_params.p', 'cpvert_4MeV_sin_params.p']
     if fitted_heatmap_11:
-        plot_fitted_heatmaps(sin_fits[0], sin_fits[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, multiplot=True, save_multiplot=True)
+        plot_fitted_heatmaps(sin_fits[0], sin_fits[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, multiplot=False, save_multiplot=False)
     if fitted_heatmap_4:
         plot_fitted_heatmaps(sin_fits[2], sin_fits[3], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=False, multiplot=False, save_multiplot=False)
 
@@ -1005,10 +1009,10 @@ if __name__ == '__main__':
     compare_a_axes = False
 
     # plots a/c' and a/b ql or pulse shape ratios from 0deg measurements
-    ratios_plot = False
+    ratios_plot = True
 
     # plot heatmaps with data points
-    heatmap_11 = False
+    heatmap_11 = False 
     heatmap_4 = False
 
     # plot heatmaps with fitted data
@@ -1019,6 +1023,6 @@ if __name__ == '__main__':
     polar_plots = False
 
     # rbf interpolated heatmaps
-    rbf_interp_heatmaps = True
+    rbf_interp_heatmaps = False
 
     main()

@@ -74,3 +74,6 @@
     * added pulse shape analysis to multiplot
     * updated plot_ratios
     * new branch for testing minimization
+
+* 4/9/2019
+    * new lo calibration data added (new hot spot data)
