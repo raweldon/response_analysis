@@ -80,10 +80,10 @@ def order_by_rot(data, beam_11MeV):
     else:
         if len(data.filename) == 15:
             rot_order = [12, 13, 14, 5, 6, 0, 1, 2, 3, 7, 8, 9, 4, 10, 11]
-            angles =    np.array([0, 20, 30, 40, 50, 60, 70, 80, 90, 100, 120, 140, 160, 180, 190])
+            angles = np.array([0, 20, 30, 40, 50, 60, 70, 80, 90, 100, 120, 140, 160, 180, 190])
         else:
             rot_order = [12, 13, 5, 6, 0, 1, 2, 3, 7, 8, 9, 4, 10, 11]
-            angles =    np.array([0, 20, 30, 40, 50, 60, 70, 80, 90, 100, 120, 140, 160, 180])
+            angles = np.array([0, 20, 30, 40, 50, 60, 70, 80, 90, 100, 120, 140, 160, 180])
 
     data = data.assign(rot_order = rot_order)
     data = data.sort_values('rot_order')
@@ -244,6 +244,7 @@ def tilt_check(det_data, dets, tilts, pickle_name, cwd, p_dir, beam_11MeV, print
                             plt.savefig(cwd + '/figures/tilt_plots/pulse_shape/' + name + '_pulse_shape.png')
                         else:
                             plt.savefig(cwd + '/figures/tilt_plots/' + name + '.png')
+                            print 'plots saved to /figures/tilt_plots/' + name + '.png'
         if show_plots:
             plt.show()
 
@@ -948,7 +949,7 @@ def main():
             data = pd_load(f, p_dir)
             data = split_filenames(data)
             tilt_check(data, dets, tilts, f, cwd, p_dir, beam_11MeV, print_max_ql=False, get_a_data=False, pulse_shape=False, 
-                       delayed=False, prompt=False, show_plots=True, save_plots=False, save_pickle=True)
+                       delayed=False, prompt=False, show_plots=True, save_plots=False, save_pickle=False)
 
     # comparison of ql for recoils along the a-axis
     if compare_a_axes:
@@ -956,7 +957,7 @@ def main():
 
     # plot ratios
     if ratios_plot:
-        plot_ratios(fin, dets, cwd, p_dir, pulse_shape=True, plot_fit_ratio=False)
+        plot_ratios(fin, dets, cwd, p_dir, pulse_shape=False, plot_fit_ratio=False)
     
     # 3d plotting
     theta_n = [70, 60, 50, 40, 30, 20, 20, 30, 40, 50, 60, 70]
