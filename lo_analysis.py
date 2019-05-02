@@ -978,7 +978,7 @@ def main():
     ## heat maps with data points
     if heatmap_11:
         plot_heatmaps(fin[0], fin[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, 
-                      plot_pulse_shape=True, multiplot=False, save_multiplot=False, show_delaunay=True)
+                      plot_pulse_shape=False, multiplot=False, save_multiplot=False, show_delaunay=False)
     if heatmap_4:
         plot_heatmaps(fin[2], fin[3], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=False, 
                       plot_pulse_shape=True, multiplot=False, save_multiplot=False, show_delaunay=False)
@@ -1010,10 +1010,10 @@ if __name__ == '__main__':
     compare_a_axes = False
 
     # plots a/c' and a/b ql or pulse shape ratios from 0deg measurements
-    ratios_plot = True
+    ratios_plot = False
 
     # plot heatmaps with data points
-    heatmap_11 = False 
+    heatmap_11 = True 
     heatmap_4 = False
 
     # plot heatmaps with fitted data
