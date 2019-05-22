@@ -77,3 +77,11 @@
 
 * 4/9/2019
     * new lo calibration data added (new hot spot data)
+
+* 5/22/2019
+    * added adc_vs_cal_ratios function to analyze issues with new calibration
+        * turns out the linear calibration m*x+b changes the ratio due to the intercept term (large effect at low light output)
+        * reformulated according to dietze c(E_e - E_0) where (E_e - E_0) is the *effective* electron light output and E_0 accounts for quenching 
+    * uba_pmt_vs_new.py - compares june 2016 data with current data 
+        * looks at effect of saturation -- large
+    
