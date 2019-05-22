@@ -29,7 +29,7 @@ import dask.array as da
 
 def pd_load(filename, p_dir):
     # converts pickled data into pandas DataFrame
-    print '\nLoading pickle data from:\n', p_dir+filename
+    print '\nLoading pickle data from:\n', p_dir + filename
     data = pd.read_pickle(p_dir + filename)
     headers = data.pop(0)
     #print headers
@@ -97,8 +97,8 @@ def fit_tilt_data(data, angles, print_report):
         # sinusoid fit with lmfit
         angles = [np.deg2rad(x) for x in angles]
         gmodel = lmfit.Model(sin_func)
-        params = gmodel.make_params(a=1, b=0.1, phi=0)
-        res = gmodel.fit(data, params=params, x=angles, nan_policy='omit')
+        params = gmodel.make_params(a=1, b=1, phi=0)
+        res = gmodel.fit(data, params=params, x=angles, nan_policy='omit')#, method='nelder')
         if print_report:
             print '\n', lmfit.fit_report(res)
         return res
@@ -256,6 +256,7 @@ def tilt_check(det_data, dets, tilts, pickle_name, cwd, p_dir, beam_11MeV, print
 
     if get_a_data:
         headers = a_axis_data.pop(0)
+        #pickle.dump( a_axis_data, open( p_dir + 'a_axis_data.p', 'wb'))
         return pd.DataFrame(a_axis_data, columns=headers), pd.DataFrame(cp_b_axes_data, columns=headers)
 
 def polar_to_cartesian(theta, phi, crystal_orientation, cp_up):
@@ -701,19 +702,21 @@ def plot_ratios(fin, dets, cwd, p_dir, pulse_shape, plot_fit_ratio):
             #ps_baseline_uncert = (0.01, 0.01, 0.02, 0.04, 0.1, 0.3, 0.3, 0.1, 0.04, 0.02, 0.01, 0.01) # ql uncert
             ps_baseline_uncert = (0.001, 0.001, 0.002, 0.003, 0.008, 0.027, 0.026, 0.008, 0.003, 0.002, 0.001) # qs uncert
         if 'bvert' in f:
-            tilts = [0, 45, -45, 30, -30, 15, -15]
+            #tilts = [0, 45, -45, 30, -30, 15, -15]
             tilts = [0]
             color = 'r'
         else:
-            tilts = [0, 30, -30, 15, -15]
+            #tilts = [0, 30, -30, 15, -15]
             tilts = [0]
             color = 'b'
 
         data = pd_load(f, p_dir)
         data = split_filenames(data)  
-        a_axis_df, cp_b_axes_df = tilt_check(data, dets, tilts, f, cwd, p_dir, beam_11MeV, 
-                                             print_max_ql=False, get_a_data=True, pulse_shape=pulse_shape, delayed=False, prompt=False, show_plots=False, save_plots=False, save_pickle=False)
-
+        a_axis_df, cp_b_axes_df = tilt_check(data, dets, tilts, f, cwd, p_dir, beam_11MeV, print_max_ql=False, get_a_data=True, 
+                                             pulse_shape=pulse_shape, delayed=False, prompt=False, show_plots=False, save_plots=False, save_pickle=False)
+        print a_axis_df.to_string()
+        print cp_b_axes_df.to_string()
+    
         if beam_11MeV:
             a_ql = a_axis_df.ql.iloc[np.where(a_axis_df.tilt == 0)].values
             a_uncert = a_axis_df.abs_uncert.iloc[np.where(a_axis_df.tilt == 0)].values
@@ -786,6 +789,200 @@ def plot_ratios(fin, dets, cwd, p_dir, pulse_shape, plot_fit_ratio):
             plt.ylabel('light output ratio')
             plt.legend()
             plt.xlabel('proton recoil energy (MeV)')     
+    plt.show()
+
+def adc_vs_cal_ratios(fin, dets, cwd, p_dir, plot_fit_ratio):
+    ''' Use to analyze effect of calibration on light output ratios
+    
+    '''
+    def remove_cal(lo, m, b):
+        return m*lo + b
+
+    def new_cal(lo, m, b, new_m, new_b):
+        y = m*lo + b
+        return (y - new_b)/new_m
+
+    ratios, ratios_adc, ratios_new, p_ergs = [], [], [], []
+    for i, f in enumerate(fin):
+        label_fit = ['', '', '', 'fit ratios']
+        label = ['L$_a$/L$_c\'$', 'L$_a$/L$_b$', '', '']
+        label_pat = ['', '', '', 'Schuster ratios']
+        if '11' in f:
+            beam_11MeV = True
+            angles = [70, 60, 50, 40, 30, 20, 20, 30, 40, 50, 60, 70]
+            p_erg = 11.325*np.sin(np.deg2rad(angles))**2
+        else:
+            beam_11MeV = False
+            angles = [60, 40, 20, 30, 50, 70]
+            p_erg = 4.825*np.sin(np.deg2rad(angles))**2
+        if 'bvert' in f:
+            #tilts = [0, 45, -45, 30, -30, 15, -15]
+            tilts = [0]
+            color = 'r'
+            if '11MeV' in f:
+                m = 8598.74  # calibration terms from /home/radians/raweldon/tunl.2018.1_analysis/stilbene_final/lo_calibration/gamma_calibration.py
+                b = -155.15
+                new_m = 8868.6
+                new_b = -190.0
+            if '4MeV' in f:
+                m = 25686.35
+                b = -544.24
+                new_m = 25000 #25690.4
+                new_b = 125 #-497.5
+        else:
+            #tilts = [0, 30, -30, 15, -15]
+            tilts = [0]
+            color = 'b'
+            if '11MeV' in f:
+                m = 8662.28
+                b = -166.65
+                new_m = 8894.9
+                new_b = -212.2
+            if '4MeV' in f:
+                m = 26593.44
+                b = -534.64
+                new_m = 26573.7
+                new_b = -658.3
+
+        data = pd_load(f, p_dir)
+        data = split_filenames(data)  
+        a_axis_df, cp_b_axes_df = tilt_check(data, dets, tilts, f, cwd, p_dir, beam_11MeV, print_max_ql=False, get_a_data=True, 
+                                             pulse_shape=False, delayed=False, prompt=False, show_plots=False, save_plots=False, save_pickle=False)
+        print a_axis_df.to_string()
+        print cp_b_axes_df.to_string()
+    
+        if beam_11MeV:
+            a_ql = a_axis_df.ql.iloc[np.where(a_axis_df.tilt == 0)].values
+            a_uncert = a_axis_df.abs_uncert.iloc[np.where(a_axis_df.tilt == 0)].values
+            a_fit_ql = a_axis_df.fit_ql.iloc[np.where(a_axis_df.tilt == 0)].values
+            a_ql_adc = np.array([remove_cal(lo, m, b) for lo in a_ql])
+            a_uncert_adc = np.array([remove_cal(lo, m, b) for lo in a_uncert])
+            a_fit_ql_adc = np.array([remove_cal(lo, m, b) for lo in a_fit_ql])    
+            a_ql_new = np.array([new_cal(lo, m, b, new_m, new_b) for lo in a_ql])
+            a_uncert_new = np.array([new_cal(lo, m, b, new_m, new_b) for lo in a_uncert])
+            a_fit_ql_new = np.array([new_cal(lo, m, b, new_m, new_b) for lo in a_fit_ql]) 
+
+            cp_b_ql = cp_b_axes_df.ql.iloc[np.where(cp_b_axes_df.tilt == 0)].values
+            cp_b_uncert = cp_b_axes_df.abs_uncert.iloc[np.where(cp_b_axes_df.tilt == 0)].values
+            cp_b_fit_ql = cp_b_axes_df.fit_ql.iloc[np.where(cp_b_axes_df.tilt == 0)].values
+            cp_b_ql_adc = np.array([remove_cal(lo, m, b) for lo in cp_b_ql])
+            cp_b_uncert_adc = np.array([remove_cal(lo, m, b) for lo in cp_b_uncert])
+            cp_b_fit_ql_adc = np.array([remove_cal(lo, m, b) for lo in cp_b_fit_ql])    
+            cp_b_ql_new = np.array([new_cal(lo, m, b, new_m, new_b) for lo in cp_b_ql])
+            cp_b_uncert_new = np.array([new_cal(lo, m, b, new_m, new_b) for lo in cp_b_uncert])
+            cp_b_fit_ql_new = np.array([new_cal(lo, m, b, new_m, new_b) for lo in cp_b_fit_ql]) 
+
+            ratio = a_ql/cp_b_ql
+            ratio_adc = a_ql_adc/cp_b_ql_adc
+            ratio_new = a_ql_new/cp_b_ql_new
+            fit_ratio = a_fit_ql/cp_b_fit_ql
+            fit_ratio_adc = a_fit_ql_adc/cp_b_fit_ql_adc
+            fit_ratio_new = a_fit_ql_new/cp_b_fit_ql_new
+            uncert = np.sqrt(ratio**2 * ((a_uncert/a_ql)**2 + (cp_b_uncert/cp_b_ql)**2))
+            uncert_adc = np.sqrt(ratio_adc**2 * ((a_uncert_adc/a_ql_adc)**2 + (cp_b_uncert_adc/cp_b_ql_adc)**2))
+            uncert_new = np.sqrt(ratio_new**2 * ((a_uncert_new/a_ql_new)**2 + (cp_b_uncert_new/cp_b_ql_new)**2))
+            shape = 'o'
+        else:
+            # account for skipped detectors with 4 MeV beam measurements
+            ratio, uncert, fit_ratio, ratio_adc, uncert_adc, fit_ratio_adc, ratio_new, uncert_new, fit_ratio_new = [], [], [], [], [], [], [], [], []
+            for d, det in enumerate(a_axis_df.det.values):
+                if det in cp_b_axes_df.det.values:
+                    a_ql = a_axis_df.ql.iloc[np.where(a_axis_df.det == det)].values
+                    a_uncert = a_axis_df.abs_uncert.iloc[np.where(a_axis_df.det == det)].values
+                    a_fit_ql = a_axis_df.fit_ql.iloc[np.where(a_axis_df.det == det)].values
+                    a_ql_adc = np.array([remove_cal(lo, m, b) for lo in a_ql])
+                    a_uncert_adc = np.array([remove_cal(lo, m, b) for lo in a_uncert])
+                    a_fit_ql_adc = np.array([remove_cal(lo, m, b) for lo in a_fit_ql])  
+                    a_ql_new = np.array([new_cal(lo, m, b, new_m, new_b) for lo in a_ql])
+                    a_uncert_new = np.array([new_cal(lo, m, b, new_m, new_b) for lo in a_uncert])
+                    a_fit_ql_new = np.array([new_cal(lo, m, b, new_m, new_b) for lo in a_fit_ql])
+
+                    cp_b_ql = cp_b_axes_df.ql.iloc[np.where(cp_b_axes_df.det == det)].values
+                    cp_b_uncert = cp_b_axes_df.abs_uncert.iloc[np.where(cp_b_axes_df.det == det)].values
+                    cp_b_fit_ql = cp_b_axes_df.fit_ql.iloc[np.where(cp_b_axes_df.det == det)].values
+                    cp_b_ql_adc = np.array([remove_cal(lo, m, b) for lo in cp_b_ql])
+                    cp_b_uncert_adc = np.array([remove_cal(lo, m, b) for lo in cp_b_uncert])
+                    cp_b_fit_ql_adc = np.array([remove_cal(lo, m, b) for lo in cp_b_fit_ql])  
+                    cp_b_ql_new = np.array([new_cal(lo, m, b, new_m, new_b) for lo in cp_b_ql])
+                    cp_b_uncert_new = np.array([new_cal(lo, m, b, new_m, new_b) for lo in cp_b_uncert])
+                    cp_b_fit_ql_new = np.array([new_cal(lo, m, b, new_m, new_b) for lo in cp_b_fit_ql]) 
+                    
+                    rat = a_ql/cp_b_ql
+                    rat_adc = a_ql_adc/cp_b_ql_adc
+                    rat_new = a_ql_new/cp_b_ql_new
+                    unc = np.sqrt(rat**2 * ((a_uncert/a_ql)**2 + (cp_b_uncert/cp_b_ql)**2)) # no baseline uncert
+                    unc_adc = np.sqrt(rat_adc**2 * ((a_uncert_adc/a_ql_adc)**2 + (cp_b_uncert_adc/cp_b_ql_adc)**2))
+                    unc_new = np.sqrt(rat_new**2 * ((a_uncert_new/a_ql_new)**2 + (cp_b_uncert_new/cp_b_ql_new)**2))
+                    print a_ql_new, a_uncert_new, cp_b_ql_new, cp_b_uncert_new, unc_new
+                    rat_fit = a_fit_ql/cp_b_fit_ql
+                    rat_fit_adc = a_fit_ql_adc/cp_b_fit_ql_adc
+                    rat_fit_new = a_fit_ql_new/cp_b_fit_ql_new
+                    ratio.extend(rat)
+                    ratio_adc.extend(rat_adc)
+                    ratio_new.extend(rat_new)
+                    uncert.extend(unc)
+                    uncert_adc.extend(unc_adc)
+                    uncert_new.extend(unc_new)
+                    fit_ratio.extend(rat_fit)
+                    fit_ratio_adc.extend(rat_fit_adc)
+                    fit_ratio_new.extend(rat_fit_new)
+                    shape = '^'
+                else:
+                    continue
+        ratios.append(ratio)    
+        ratios_adc.append(ratio_adc)  
+        ratios_new.append(ratio_new)
+        p_ergs.append(p_erg)
+
+        plt.figure(0)
+        # plot measured a/cp and a/b ratios 
+        plt.errorbar(p_erg, ratio, yerr=uncert, ecolor='black', markerfacecolor='None', fmt=shape, 
+                        markeredgecolor=color, markeredgewidth=1, markersize=10, capsize=1, label=label[i])
+        # plot fitted data
+        if plot_fit_ratio:
+            plt.errorbar(p_erg, fit_ratio, ecolor='black', markerfacecolor='None', fmt='s', 
+                            markeredgecolor='g', markeredgewidth=1, markersize=10, capsize=1, label=label_fit[i])
+        xmin, xmax = plt.xlim(0, 11)
+        plt.plot(np.linspace(xmin, xmax, 10), [1.0]*10, 'k--')
+        plt.ylabel('light output ratio')
+        plt.legend()
+        plt.xlabel('proton recoil energy (MeV)')   
+
+        plt.figure(1)
+        # plot measured a/cp and a/b ratios 
+        plt.errorbar(p_erg, ratio_adc, ecolor='black', markerfacecolor='None', fmt=shape, 
+                        markeredgecolor=color, markeredgewidth=1, markersize=10, capsize=1, label=label[i])
+        # plot fitted data
+        if plot_fit_ratio:
+            plt.errorbar(p_erg, fit_ratio_adc, ecolor='black', markerfacecolor='None', fmt='s', 
+                            markeredgecolor='g', markeredgewidth=1, markersize=10, capsize=1, label=label_fit[i])
+        xmin, xmax = plt.xlim(0, 11)
+        plt.plot(np.linspace(xmin, xmax, 10), [1.0]*10, 'k--')
+        plt.ylabel('relative light yield ratio')
+        plt.legend()
+        plt.xlabel('proton recoil energy (MeV)')
+
+        plt.figure(2)
+        # plot measured a/cp and a/b ratios 
+        plt.errorbar(p_erg, ratio_new, yerr=uncert_new, ecolor='black', markerfacecolor='None', fmt=shape, 
+                        markeredgecolor=color, markeredgewidth=1, markersize=10, capsize=1, label=label[i])
+        # plot fitted data
+        if plot_fit_ratio:
+            plt.errorbar(p_erg, fit_ratio_new, ecolor='black', markerfacecolor='None', fmt='s', 
+                            markeredgecolor='g', markeredgewidth=1, markersize=10, capsize=1, label=label_fit[i])
+        xmin, xmax = plt.xlim(0, 11)
+        plt.plot(np.linspace(xmin, xmax, 10), [1.0]*10, 'k--')
+        plt.ylabel('relative light yield ratio')
+        plt.legend()
+        plt.xlabel('proton recoil energy (MeV)')
+   
+    # print results
+    print '   Ep     MeVee     ADC     %diff    new_cal     %diff'
+    for ep, ratio, ratio_adc, ratio_new in zip(p_ergs, ratios, ratios_adc, ratios_new):
+        for e, r, r_adc, r_new in zip(ep, ratio, ratio_adc, ratio_new):
+            print '{:^8.2f} {:^8.3f} {:^8.3f} {:^8.2f} {:^8.3f} {:^8.2f}'.format(e, r, r_adc, 100*2*(r_adc - r)/(r_adc+r), r_new, 100*2*(r_adc - r_new)/(r_new + r_adc))
+ 
+
     plt.show()
 
 def polar_norm(x1, x2):
@@ -932,7 +1129,7 @@ def main():
     p_dir = cwd + '/pickles/'
     fin = ['bvert_11MeV.p', 'cpvert_11MeV.p', 'bvert_4MeV.p', 'cpvert_4MeV.p']
     #fin = ['bvert_4MeV.p', 'cpvert_4MeV.p']
-    dets = [4, 5, 6 ,7 ,8 ,9, 10, 11, 12, 13, 14, 15]
+    dets = [4, 5, 6 ,7 ,8 , 9, 10, 11, 12, 13, 14, 15]
 
     # check individual tilt anlges
     if check_tilt:
@@ -948,8 +1145,8 @@ def main():
 
             data = pd_load(f, p_dir)
             data = split_filenames(data)
-            tilt_check(data, dets, tilts, f, cwd, p_dir, beam_11MeV, print_max_ql=False, get_a_data=False, pulse_shape=False, 
-                       delayed=False, prompt=False, show_plots=True, save_plots=False, save_pickle=False)
+            tilt_check(data, dets, tilts, f, cwd, p_dir, beam_11MeV, print_max_ql=False, get_a_data=True, pulse_shape=False, 
+                       delayed=False, prompt=False, show_plots=False, save_plots=False, save_pickle=False)
 
     # comparison of ql for recoils along the a-axis
     if compare_a_axes:
@@ -958,6 +1155,9 @@ def main():
     # plot ratios
     if ratios_plot:
         plot_ratios(fin, dets, cwd, p_dir, pulse_shape=False, plot_fit_ratio=False)
+
+    if adc_vs_cal:
+        adc_vs_cal_ratios(fin, dets, cwd, p_dir, plot_fit_ratio=True)
     
     # 3d plotting
     theta_n = [70, 60, 50, 40, 30, 20, 20, 30, 40, 50, 60, 70]
@@ -1004,7 +1204,7 @@ if __name__ == '__main__':
     scatter_4 = False
 
     # check lo for a specific tilt (sinusoids)
-    check_tilt = False
+    check_tilt = True
 
     # compare a_axis recoils (all tilts measure ql along a-axis)
     compare_a_axes = False
@@ -1012,8 +1212,11 @@ if __name__ == '__main__':
     # plots a/c' and a/b ql or pulse shape ratios from 0deg measurements
     ratios_plot = False
 
+    # analyze relative light output ratios agains calibrated data ratios
+    adc_vs_cal = False
+
     # plot heatmaps with data points
-    heatmap_11 = True 
+    heatmap_11 = False 
     heatmap_4 = False
 
     # plot heatmaps with fitted data
