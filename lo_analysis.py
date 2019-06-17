@@ -251,7 +251,9 @@ def tilt_check(det_data, dets, tilts, pickle_name, cwd, p_dir, beam_11MeV, print
     # save sinusoid fit to pickle
     if save_pickle:
         name = pickle_name.split('.')[0]
-        pickle.dump( sin_params, open( p_dir + name + '_sin_params.p', "wb" ) )
+        out = open( p_dir + name + '_sin_params.p', "wb" )
+        pickle.dump( sin_params, out)
+        out.close()
         print 'pickle saved to ' + p_dir + name + '_sin_params.p'
 
     if get_a_data:
@@ -1146,7 +1148,7 @@ def main():
             data = pd_load(f, p_dir)
             data = split_filenames(data)
             tilt_check(data, dets, tilts, f, cwd, p_dir, beam_11MeV, print_max_ql=False, get_a_data=True, pulse_shape=False, 
-                       delayed=False, prompt=False, show_plots=False, save_plots=False, save_pickle=False)
+                       delayed=False, prompt=False, show_plots=False, save_plots=False, save_pickle=True)
 
     # comparison of ql for recoils along the a-axis
     if compare_a_axes:
