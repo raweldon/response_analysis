@@ -1126,6 +1126,121 @@ def rbf_interp_heatmap(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, t
             mlab.colorbar(mesh, orientation='vertical')
         mlab.show()
 
+def sph_harm_fit(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV, plot_pulse_shape, multiplot, save_multiplot):
+    from scipy.special import sph_harm
+
+    def coeff_names(order):
+        # return list of coefficient names for approriate order
+        coeff_no = 2*order + 1
+        idx = coeff_no - order
+        names = []
+        for i in range(1, coeff_no):
+            names.append('c_' + str(i - idx) + str(order))
+        return names
+
+    def add_params(fit_params, name):
+        fit_params.add(name, value=1)
+        return fit_params
+
+    def minimize(fit_params, *args):
+        ql, theta, phi = args
+        pars = fit_params.valuesdict()
+        c00, c1_1, c10, c11, c20, c2_2, c2_1, c21, c22, c30 = pars['c00'], pars['c1_1'], pars['c10'], pars['c11'], pars['c20'], pars['c2_2'], pars['c2_1'], pars['c21'], pars['c22'], pars['c30']
+        
+        harmonics = c00*sph_harm(0, 0, theta, phi) + c1_1*sph_harm(-1, 1, theta, phi) + c10*sph_harm(0, 1, theta, phi) + c11*sph_harm(1, 1, theta, phi) + \
+                    c20*sph_harm(0, 2, theta, phi) + c2_2*sph_harm(-2, 2, theta, phi) + c2_1*sph_harm(-1, 2, theta, phi) + c21*sph_harm(1, 2, theta, phi) + \
+                    c22*sph_harm(2, 2, theta, phi) + c30*sph_harm(0, 3, theta, phi)
+        harmonics = harmonics.real
+
+        return ql - harmonics
+
+    data_bvert = pd_load(fin1, p_dir)
+    data_bvert = split_filenames(data_bvert)
+    data_cpvert = pd_load(fin2, p_dir)
+    data_cpvert = split_filenames(data_cpvert)
+
+    for d, det in enumerate(dets):       
+        #if d > 0 :
+        #    continue
+        print '\ndet_no =', det, 'theta_n =', theta_n[d]
+        df_b_mapped = map_data_3d(data_bvert, det, bvert_tilt, b_up, theta_n[d], phi_n[d], beam_11MeV) 
+        df_b_mapped_mirror = map_data_3d(data_bvert, det, bvert_tilt, np.asarray(((1,0,0), (0,1,0), (0,0,-1))), theta_n[d], phi_n[d], beam_11MeV)
+        df_cp_mapped = map_data_3d(data_cpvert, det, cpvert_tilt, cp_up, theta_n[d], phi_n[d], beam_11MeV)
+        df_cp_mapped_mirror = map_data_3d(data_cpvert, det, cpvert_tilt, np.asarray(((-1,0,0), (0,0,-1), (0,1,0))), theta_n[d], phi_n[d], beam_11MeV)
+
+        # convert to proper frame (b and cp orientations are different)
+        theta_b = np.concatenate([df_b_mapped.theta.values, df_b_mapped_mirror.theta.values])
+        theta_cp = np.concatenate([df_cp_mapped.theta.values, df_cp_mapped_mirror.theta.values])
+        phi_b = np.concatenate([df_b_mapped.phi.values, df_b_mapped_mirror.phi.values])
+        phi_cp = np.concatenate([df_cp_mapped.phi.values, df_cp_mapped_mirror.phi.values])
+
+        x_b, y_b, z_b = polar_to_cartesian(theta_b, phi_b, b_up, cp_up)
+        x_cp, y_cp, z_cp = polar_to_cartesian(theta_cp, phi_cp, cp_up, cp_up)
+
+        x = np.concatenate((x_b, x_cp))
+        y = np.concatenate((y_b, y_cp))
+        z = np.concatenate((z_b, z_cp))
+        ql = np.concatenate([df_b_mapped.ql_mean.values, df_b_mapped_mirror.ql_mean.values, df_cp_mapped.ql_mean.values, df_cp_mapped_mirror.ql_mean.values])
+        tilts = np.concatenate([df_b_mapped.tilt.values, df_b_mapped_mirror.tilt.values, df_cp_mapped.tilt.values, df_cp_mapped_mirror.tilt.values])
+
+        ## remove repeated points
+        xyz = np.array(zip(x, y, z))
+        xyz_u, indices = np.unique(xyz, axis=0, return_index=True)
+        ql = ql[indices]
+        tilts = tilts[indices]
+        x, y, z = xyz_u.T
+
+        ## convert back to spheical coords for sph harmonics fitting
+        theta = np.arccos(z)
+        phi = np.arctan(y/x)
+
+        fit_params = lmfit.Parameters()
+        fit_params.add('c00', value=1 )
+        fit_params.add('c1_1', value=1) # l=1 m=-1
+        fit_params.add('c10', value=1 )
+        fit_params.add('c11', value=1 )
+        fit_params.add('c20', value=1 )
+        fit_params.add('c2_2', value=1)
+        fit_params.add('c2_1', value=1)
+        fit_params.add('c21',  value=1)       
+        fit_params.add('c22', value=1)
+        fit_params.add('c30', value=1)
+
+        fit_kws={'nan_policy': 'omit'}
+        res = lmfit.minimize(minimize, fit_params, args=(ql, theta, phi), **fit_kws)
+        print '\n', res.message
+        print lmfit.fit_report(res)
+
+        c00, c1_1, c10, c11, c20, c2_2, c2_1, c21 = res.params['c00'].value, res.params['c1_1'].value, res.params['c10'].value, res.params['c11'].value \
+                                                    , res.params['c20'].value, res.params['c2_2'].value, res.params['c2_1'].value, res.params['c21'].value
+
+        sph_harmonics = c00*sph_harm(0, 0, theta, phi) + c1_1*sph_harm(-1, 1, theta, phi) + c10*sph_harm(0, 1, theta, phi) + c11*sph_harm(1, 1, theta, phi) + \
+                        c20*sph_harm(0, 2, theta, phi) + c2_2*sph_harm(-2, 2, theta, phi) + c2_1*sph_harm(-1, 2, theta, phi) + c21*sph_harm(1, 2, theta, phi)
+
+        # plot
+        fig = mlab.figure(size=(400*2, 350*2)) 
+        fig.scene.disable_render = True
+        pts = mlab.points3d(x, y, z, sph_harmonics.real, colormap='viridis', scale_mode='none', scale_factor=0.03)
+
+        ## delaunay triagulation (mesh, interpolation)
+        tri = mlab.pipeline.delaunay3d(pts)
+        edges = mlab.pipeline.extract_edges(tri)
+        #edges = mlab.pipeline.surface(edges, colormap='viridis')
+
+        tri_smooth = mlab.pipeline.poly_data_normals(tri) # smooths delaunay triangulation mesh
+        surf = mlab.pipeline.surface(tri_smooth, colormap='viridis')
+        
+        #for x_val, y_val, z_val, ql_val, tilt in zip(x, y, z, sph_harmonics, tilts):
+        #    #mlab.text3d(x_val, y_val, z_val, str(ql_val), scale=0.03, color=(0,0,0), figure=fig)
+        #    mlab.text3d(x_val, y_val, z_val, str(tilt), scale=0.03, color=(0,0,0), figure=fig) 
+
+        mlab.axes(pts, xlabel='a', ylabel='b', zlabel='c\'')
+        mlab.colorbar(surf, orientation='vertical') 
+        mlab.view(azimuth=0, elevation=90, distance=7.5, figure=fig)  
+        #mlab.title(name)
+        fig.scene.disable_render = False   
+        mlab.show()
+
 def main():
     cwd = os.getcwd()
     p_dir = cwd + '/pickles/'
@@ -1156,7 +1271,7 @@ def main():
 
     # plot ratios
     if ratios_plot:
-        plot_ratios(fin, dets, cwd, p_dir, pulse_shape=False, plot_fit_ratio=False)
+        plot_ratios(fin, dets, cwd, p_dir, pulse_shape=True, plot_fit_ratio=False)
 
     if adc_vs_cal:
         adc_vs_cal_ratios(fin, dets, cwd, p_dir, plot_fit_ratio=True)
@@ -1200,13 +1315,16 @@ def main():
     if rbf_interp_heatmaps:
         rbf_interp_heatmap(fin[0], fin[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, plot_pulse_shape=True, multiplot=False, save_multiplot=False)
 
+    if spherical_harmonics:
+        sph_harm_fit(fin[0], fin[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, plot_pulse_shape=False, multiplot=False, save_multiplot=False)
+
 if __name__ == '__main__':
     # check 3d scatter plots for both crystals
     scatter_11 = False
     scatter_4 = False
 
     # check lo for a specific tilt (sinusoids)
-    check_tilt = True
+    check_tilt = False
 
     # compare a_axis recoils (all tilts measure ql along a-axis)
     compare_a_axes = False
@@ -1230,5 +1348,7 @@ if __name__ == '__main__':
 
     # rbf interpolated heatmaps
     rbf_interp_heatmaps = False
+
+    spherical_harmonics=True
 
     main()
