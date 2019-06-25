@@ -1129,29 +1129,34 @@ def rbf_interp_heatmap(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, t
 def sph_harm_fit(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV, plot_pulse_shape, multiplot, save_multiplot):
     from scipy.special import sph_harm
 
-    def coeff_names(order):
-        # return list of coefficient names for approriate order
-        coeff_no = 2*order + 1
-        idx = coeff_no - order
-        names = []
-        for i in range(1, coeff_no):
-            names.append('c_' + str(i - idx) + str(order))
-        return names
+    def get_coeff_names(order):
+        # return list of coefficient names for a given order
+        names, order_coeff = [], []
+        for o in range(0, order + 1):
+            coeff_no = 2*o + 1
+            idx = coeff_no - o - 1
+            for i in range(0, coeff_no):
+                names.append('c_' + str(i) + str(o))
+                order_coeff.append((o, i - idx))
+        return names, order_coeff
 
-    def add_params(fit_params, name):
-        fit_params.add(name, value=1)
+    def add_params(names):
+        # create parameter argument for lmfit
+        fit_params = lmfit.Parameters()
+        for name in names:
+            fit_params.add(name, value=1)
         return fit_params
 
     def minimize(fit_params, *args):
-        ql, theta, phi = args
-        pars = fit_params.valuesdict()
-        c00, c1_1, c10, c11, c20, c2_2, c2_1, c21, c22, c30 = pars['c00'], pars['c1_1'], pars['c10'], pars['c11'], pars['c20'], pars['c2_2'], pars['c2_1'], pars['c21'], pars['c22'], pars['c30']
-        
-        harmonics = c00*sph_harm(0, 0, theta, phi) + c1_1*sph_harm(-1, 1, theta, phi) + c10*sph_harm(0, 1, theta, phi) + c11*sph_harm(1, 1, theta, phi) + \
-                    c20*sph_harm(0, 2, theta, phi) + c2_2*sph_harm(-2, 2, theta, phi) + c2_1*sph_harm(-1, 2, theta, phi) + c21*sph_harm(1, 2, theta, phi) + \
-                    c22*sph_harm(2, 2, theta, phi) + c30*sph_harm(0, 3, theta, phi)
-        harmonics = harmonics.real
+        ql, theta, phi, names, order_coeff = args
 
+        pars = fit_params.valuesdict()
+        harmonics = 0
+        for name, oc in zip(names, order_coeff):
+            c = pars[name]
+            harmonics += c*sph_harm(oc[1], oc[0], theta, phi)
+
+        harmonics = harmonics.real
         return ql - harmonics
 
     data_bvert = pd_load(fin1, p_dir)
@@ -1193,52 +1198,47 @@ def sph_harm_fit(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n
         ## convert back to spheical coords for sph harmonics fitting
         theta = np.arccos(z)
         phi = np.arctan(y/x)
+        ## check for nan in phi
+        nans = np.argwhere(np.isnan(phi))
+        for nan in nans:
+            phi[nan] = phi[nan-1]
+        print phi
+        # lmfit
+        for i in range(1, 8):
+            order = i
+            names, order_coeff = get_coeff_names(order)
+            fit_params = add_params(names)
+            fit_kws={'nan_policy': 'omit'}
+            res = lmfit.minimize(minimize, fit_params, args=(ql, theta, phi, names, order_coeff), **fit_kws)
+            print '\n', res.message
+            print lmfit.fit_report(res, show_correl=False)
 
-        fit_params = lmfit.Parameters()
-        fit_params.add('c00', value=1 )
-        fit_params.add('c1_1', value=1) # l=1 m=-1
-        fit_params.add('c10', value=1 )
-        fit_params.add('c11', value=1 )
-        fit_params.add('c20', value=1 )
-        fit_params.add('c2_2', value=1)
-        fit_params.add('c2_1', value=1)
-        fit_params.add('c21',  value=1)       
-        fit_params.add('c22', value=1)
-        fit_params.add('c30', value=1)
+            sph_harmonics = 0
+            for idx, (name, par) in enumerate(res.params.items()):
+                sph_harmonics += par.value*sph_harm(order_coeff[idx][1], order_coeff[idx][0], theta, phi)
 
-        fit_kws={'nan_policy': 'omit'}
-        res = lmfit.minimize(minimize, fit_params, args=(ql, theta, phi), **fit_kws)
-        print '\n', res.message
-        print lmfit.fit_report(res)
+            # plot
+            fig = mlab.figure(size=(400*2, 350*2)) 
+            fig.scene.disable_render = True
+            pts = mlab.points3d(x, y, z, sph_harmonics.real, colormap='viridis', scale_mode='none', scale_factor=0.03)
 
-        c00, c1_1, c10, c11, c20, c2_2, c2_1, c21 = res.params['c00'].value, res.params['c1_1'].value, res.params['c10'].value, res.params['c11'].value \
-                                                    , res.params['c20'].value, res.params['c2_2'].value, res.params['c2_1'].value, res.params['c21'].value
+            ## delaunay triagulation (mesh, interpolation)
+            tri = mlab.pipeline.delaunay3d(pts)
+            edges = mlab.pipeline.extract_edges(tri)
+            #edges = mlab.pipeline.surface(edges, colormap='viridis')
 
-        sph_harmonics = c00*sph_harm(0, 0, theta, phi) + c1_1*sph_harm(-1, 1, theta, phi) + c10*sph_harm(0, 1, theta, phi) + c11*sph_harm(1, 1, theta, phi) + \
-                        c20*sph_harm(0, 2, theta, phi) + c2_2*sph_harm(-2, 2, theta, phi) + c2_1*sph_harm(-1, 2, theta, phi) + c21*sph_harm(1, 2, theta, phi)
+            tri_smooth = mlab.pipeline.poly_data_normals(tri) # smooths delaunay triangulation mesh
+            surf = mlab.pipeline.surface(tri_smooth, colormap='viridis')
+            
+            #for x_val, y_val, z_val, ql_val, tilt in zip(x, y, z, sph_harmonics, tilts):
+            #    #mlab.text3d(x_val, y_val, z_val, str(ql_val), scale=0.03, color=(0,0,0), figure=fig)
+            #    mlab.text3d(x_val, y_val, z_val, str(tilt), scale=0.03, color=(0,0,0), figure=fig) 
 
-        # plot
-        fig = mlab.figure(size=(400*2, 350*2)) 
-        fig.scene.disable_render = True
-        pts = mlab.points3d(x, y, z, sph_harmonics.real, colormap='viridis', scale_mode='none', scale_factor=0.03)
-
-        ## delaunay triagulation (mesh, interpolation)
-        tri = mlab.pipeline.delaunay3d(pts)
-        edges = mlab.pipeline.extract_edges(tri)
-        #edges = mlab.pipeline.surface(edges, colormap='viridis')
-
-        tri_smooth = mlab.pipeline.poly_data_normals(tri) # smooths delaunay triangulation mesh
-        surf = mlab.pipeline.surface(tri_smooth, colormap='viridis')
-        
-        #for x_val, y_val, z_val, ql_val, tilt in zip(x, y, z, sph_harmonics, tilts):
-        #    #mlab.text3d(x_val, y_val, z_val, str(ql_val), scale=0.03, color=(0,0,0), figure=fig)
-        #    mlab.text3d(x_val, y_val, z_val, str(tilt), scale=0.03, color=(0,0,0), figure=fig) 
-
-        mlab.axes(pts, xlabel='a', ylabel='b', zlabel='c\'')
-        mlab.colorbar(surf, orientation='vertical') 
-        mlab.view(azimuth=0, elevation=90, distance=7.5, figure=fig)  
-        #mlab.title(name)
-        fig.scene.disable_render = False   
+            mlab.axes(pts, xlabel='a', ylabel='b', zlabel='c\'')
+            mlab.colorbar(surf, orientation='vertical') 
+            mlab.view(azimuth=0, elevation=90, distance=7.5, figure=fig)  
+            mlab.title('Order =' + str(i))
+            fig.scene.disable_render = False   
         mlab.show()
 
 def main():
