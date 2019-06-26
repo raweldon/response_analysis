@@ -87,8 +87,12 @@
     
 * 6/22/2019
     * added spherical hamonics fit to light output data
+    * not working great...
     * need to determine how many terms are needed for the data
 
 * 6/26/2019
     * got SmoothSphereBivariateSpline working -- looks great!!
     * Note: LSQSphereBivariateSpline and SmoothSphereBivariateSpline are the same if you do not use weights
+    * does not work for lo values < 1
+        * 20 and 30 deg lo, psd
+        * will scaling correct it?

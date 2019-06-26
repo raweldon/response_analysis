@@ -1205,16 +1205,28 @@ def sph_harm_fit(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n
         x, y, z = xyz_u.T
 
         ## convert back to spheical coords for sph harmonics fitting
-        #theta = np.arccos(z)
-        theta = np.arctan(np.sqrt(x**2 + y**2)/z)
-        phi = np.arctan(y/x)
+        theta = np.arccos(z)
+        phi = []
+        for a, b in zip(x, y):
+            if a < 0 and b >= 0:
+                p = np.arctan(b/a) + np.pi
+            elif a < 0 and b < 0:
+                p = np.arctan(b/a) - np.pi
+            elif a == 0 and b > 0:
+                p = np.pi/2.
+            elif a == 0 and b < 0:
+                p = -np.pi/2. 
+            else:
+                p = np.arctan(b/a)
+            phi.append(p)
+        phi = np.array(phi)    
         ## check for nan in phi
         nans = np.argwhere(np.isnan(phi))
         for nan in nans:
             phi[nan] = phi[nan-1]
 
         # lmfit
-        for i in range(4, 5):
+        for i in range(20, 21):
             order = i
             names, order_coeff = get_coeff_names(order, central_idx_only=False)
             fit_params = add_params(names)
@@ -1252,6 +1264,11 @@ def sph_harm_fit(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n
         mlab.show()
 
 def lsq_sph_biv_spl(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV, plot_pulse_shape, multiplot, save_multiplot):
+    ''' Implementations of SmoothSphereBivriateSpline and LSQSphereBivariateSpline
+        Note - they are the same if weights are not used with lsq
+        Current method used SmoothSphere
+        Adjust fitted grid and s parameter to change smoothing
+    '''
     from scipy.interpolate import LSQSphereBivariateSpline as lsqsbs
     from scipy.interpolate import SmoothSphereBivariateSpline as ssbs
 
@@ -1291,7 +1308,6 @@ def lsq_sph_biv_spl(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, thet
 
         ## convert back to spheical coords for sph harmonics fitting
         theta = np.arccos(z)
-        #theta = np.arctan(np.sqrt(x**2 + y**2)/z)
         phi = []
         for a, b in zip(x, y):
             if a < 0 and b >= 0:
@@ -1357,27 +1373,27 @@ def lsq_sph_biv_spl(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, thet
         mlab.axes(pts, xlabel='a', ylabel='b', zlabel='c\'')
         mlab.colorbar(surf, orientation='vertical') 
 
-
-        lut = lsqsbs(lats.ravel(), lons.ravel(), ql_new.ravel(), knotst, knotsp)
-        fig = mlab.figure(size=(400*2, 350*2)) 
-        # fit
-        pts = mlab.points3d(x_fine.ravel(), y_fine.ravel(), z_fine.ravel(), ql_new.ravel(), colormap='viridis', scale_mode='none', scale_factor=0.0)
-        # measured data
-        mlab.points3d(x, y, z, ql, colormap='viridis', scale_mode='none', scale_factor=0.03)
-        tri = mlab.pipeline.delaunay3d(pts)
-        edges = mlab.pipeline.extract_edges(tri)
-
-        tri_smooth = mlab.pipeline.poly_data_normals(tri) # smooths delaunay triangulation mesh
-        surf = mlab.pipeline.surface(tri_smooth, colormap='viridis')
-        
-        #for x_val, y_val, z_val, ql_val, th, ph in zip(x_fine.ravel(), y_fine.ravel(), z_fine.ravel(), ql_new.ravel(), lats.ravel(), lons.ravel()):
-        #    if th==0 or ph==0:
-        #        mlab.text3d(x_val, y_val, z_val, str(round(ql_val,3)), scale=0.03, color=(0,0,0), figure=fig)
-        #        #mlab.text3d(x_val, y_val, z_val, str(round(th, 3)) + ', ' + str(round(ph, 3)), scale=0.03, color=(0,0,0), figure=fig)
-
-        mlab.axes(pts, xlabel='a', ylabel='b', zlabel='c\'')
-        mlab.colorbar(surf, orientation='vertical') 
-        mlab.show()
+        # lsqsbs implementation
+        #lut = lsqsbs(lats.ravel(), lons.ravel(), ql_new.ravel(), knotst, knotsp)
+        #fig = mlab.figure(size=(400*2, 350*2)) 
+        ## fit
+        #pts = mlab.points3d(x_fine.ravel(), y_fine.ravel(), z_fine.ravel(), ql_new.ravel(), colormap='viridis', scale_mode='none', scale_factor=0.0)
+        ## measured data
+        #mlab.points3d(x, y, z, ql, colormap='viridis', scale_mode='none', scale_factor=0.03)
+        #tri = mlab.pipeline.delaunay3d(pts)
+        #edges = mlab.pipeline.extract_edges(tri)
+#
+        #tri_smooth = mlab.pipeline.poly_data_normals(tri) # smooths delaunay triangulation mesh
+        #surf = mlab.pipeline.surface(tri_smooth, colormap='viridis')
+        #
+        ##for x_val, y_val, z_val, ql_val, th, ph in zip(x_fine.ravel(), y_fine.ravel(), z_fine.ravel(), ql_new.ravel(), lats.ravel(), lons.ravel()):
+        ##    if th==0 or ph==0:
+        ##        mlab.text3d(x_val, y_val, z_val, str(round(ql_val,3)), scale=0.03, color=(0,0,0), figure=fig)
+        ##        #mlab.text3d(x_val, y_val, z_val, str(round(th, 3)) + ', ' + str(round(ph, 3)), scale=0.03, color=(0,0,0), figure=fig)
+#
+        #mlab.axes(pts, xlabel='a', ylabel='b', zlabel='c\'')
+        #mlab.colorbar(surf, orientation='vertical') 
+        #mlab.show()
 
 def main():
     cwd = os.getcwd()
@@ -1492,9 +1508,9 @@ if __name__ == '__main__':
     rbf_interp_heatmaps = False
 
     # fit using spherical hamonics
-    spherical_harmonics = False
+    spherical_harmonics = True
 
     # interpolation using least-squares bivariat spline approximation
-    lsq_sph_biv_spline = True
+    lsq_sph_biv_spline = False
 
     main()
