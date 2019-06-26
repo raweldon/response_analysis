@@ -1307,29 +1307,18 @@ def lsq_sph_biv_spl(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, thet
             phi.append(p)
         phi = np.array(phi)     
 
-
         ## check for nan in phi
         nans = np.argwhere(np.isnan(phi))
         for nan in nans:
             phi[nan] = phi[nan-1]
 
-        phi = phi + np.pi
-
-        x = np.sin(theta)*np.cos(phi)
-        y = np.sin(theta)*np.sin(phi)
-        z = np.cos(theta)
-        fig = mlab.figure(size=(400*2, 350*2)) 
-        pts = mlab.points3d(x, y, z, ql, colormap='viridis', scale_mode='none', scale_factor=0.03)
-        for x_val, y_val, z_val, ql_val, th, ph in zip(x, y, z, ql, theta, phi):
-            if th==0 or ph==0:
-                #mlab.text3d(x_val, y_val, z_val, str(round(ql_val,3)), scale=0.03, color=(0,0,0), figure=fig)
-                mlab.text3d(x_val, y_val, z_val, str(round(th, 3)) + ', ' + str(round(ph, 3)), scale=0.03, color=(0,0,0), figure=fig)
-                print th, ph, ql_val
+        phi = phi + np.pi           
 
         # interpolate 
         ## set interpolator object with mesh 
-        knotst = np.linspace(0, np.pi, 31)
-        knotsp = np.linspace(0, 2*np.pi, 31)
+        points = 50
+        knotst = np.linspace(0, np.pi, points)
+        knotsp = np.linspace(0, 2*np.pi, points)
         lats, lons = np.meshgrid(knotst, knotsp)
 
         knotst[0] += 0.0001
@@ -1337,75 +1326,55 @@ def lsq_sph_biv_spl(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, thet
         knotsp[0] += 0.00001
         knotsp[-1] -= 0.00001
 
-        #lut = lsqsbs(theta, phi, ql, knotst, knotsp)
-        #for t, p, q in sorted(zip(theta, phi, ql)):
-        #    print t, p, q
-        lut = ssbs(theta, phi, ql, s=1)
-        ql_new = []
-        for t, p in zip(theta, phi):
-            ql_new.append(lut(t, p)[0][0])
-        ql_new = np.array(ql_new)
-
-        fig = mlab.figure(size=(400*2, 350*2)) 
-        pts = mlab.points3d(x, y, z, ql_new, colormap='viridis', scale_mode='none', scale_factor=0.03)
-
-        x_fine = np.sin(lats.ravel()) * np.cos(lons.ravel())
-        y_fine = np.sin(lats.ravel()) * np.sin(lons.ravel())
-        #for i, j, k in zip(np.sin(lats.ravel()), np.sin(lons.ravel()), np.sin(lats.ravel())*np.sin(lons.ravel())):
-        #    print i, j, k
-        #print '\n\n'
-        z_fine = np.cos(lats.ravel())
-
-        #for k1, k2, l in zip(lats.ravel(), lons.ravel(), lut(knotst, knotsp).ravel()):
-        #    if k2 == 0 or (k2>np.pi-0.01 and k2<np.pi+0.01):
-        #        print k1, k2, l
-
-        # plot
-        fig = mlab.figure(size=(400*2, 350*2)) 
-        fig.scene.disable_render = True
-        pts = mlab.points3d(x_fine, y_fine, z_fine, lut(knotst, knotsp).ravel(), colormap='viridis', scale_mode='none', scale_factor=0.03)
-
-        for x_val, y_val, z_val, ql_val, th, ph in zip(x_fine, y_fine, z_fine, lut(knotst, knotsp).ravel(), lats.ravel(), lons.ravel()):
-            #mlab.text3d(x_val, y_val, z_val, str(ql_val), scale=0.03, color=(0,0,0), figure=fig)
-            if ph==0 or (ph>np.pi-0.01 and ph<np.pi+0.01):
-                mlab.text3d(x_val, y_val, z_val, str(round(ql_val,3)), scale=0.03, color=(0,0,0), figure=fig)
-                #mlab.text3d(x_val, y_val, z_val, str(round(th, 3)) + ', ' + str(round(ph, 3)), scale=0.03, color=(0,0,0), figure=fig)
-
-        ## delaunay triagulation (mesh, interpolation)
-        tri = mlab.pipeline.delaunay3d(pts)
-        edges = mlab.pipeline.extract_edges(tri)
-
-        tri_smooth = mlab.pipeline.poly_data_normals(tri) # smooths delaunay triangulation mesh
-        surf = mlab.pipeline.surface(tri_smooth, colormap='viridis')
-        
-        mlab.axes(pts, xlabel='a', ylabel='b', zlabel='c\'')
-        mlab.colorbar(surf, orientation='vertical') 
-        mlab.view(azimuth=0, elevation=90, distance=7.5, figure=fig)  
-        #mlab.title('Order =' + str(i))
-        fig.scene.disable_render = False   
+        lut = ssbs(theta, phi, ql, s=1.5)
 
         x_fine = np.sin(lats) * np.cos(lons)
         y_fine = np.sin(lats) * np.sin(lons)
         z_fine = np.cos(lats)
 
         ql_new = []
-        print lats.shape
         for t, p in zip(lats.ravel(), lons.ravel()):
             ql_new.append(lut(t, p)[0][0])
-        ql_new = np.reshape(np.array(ql_new), (31, 31))
+        ql_new = np.reshape(np.array(ql_new), (points, points))
 
+        # plot
         fig = mlab.figure(size=(400*2, 350*2)) 
-        pts = mlab.points3d(x_fine.ravel(), y_fine.ravel(), z_fine.ravel(), ql_new.ravel(), colormap='viridis', scale_mode='none', scale_factor=0.03)
-
-
-        fig = mlab.figure(size=(400*2, 350*2)) 
-        mlab.mesh(x_fine, y_fine, z_fine, scalars=ql_new, colormap='viridis')
+        # fit
+        pts = mlab.points3d(x_fine.ravel(), y_fine.ravel(), z_fine.ravel(), ql_new.ravel(), colormap='viridis', scale_mode='none', scale_factor=0.0)
+        # measured data
+        mlab.points3d(x, y, z, ql, colormap='viridis', scale_mode='none', scale_factor=0.03)
         tri = mlab.pipeline.delaunay3d(pts)
         edges = mlab.pipeline.extract_edges(tri)
 
         tri_smooth = mlab.pipeline.poly_data_normals(tri) # smooths delaunay triangulation mesh
         surf = mlab.pipeline.surface(tri_smooth, colormap='viridis')
         
+        #for x_val, y_val, z_val, ql_val, th, ph in zip(x_fine.ravel(), y_fine.ravel(), z_fine.ravel(), ql_new.ravel(), lats.ravel(), lons.ravel()):
+        #    if th==0 or ph==0:
+        #        mlab.text3d(x_val, y_val, z_val, str(round(ql_val,3)), scale=0.03, color=(0,0,0), figure=fig)
+        #        #mlab.text3d(x_val, y_val, z_val, str(round(th, 3)) + ', ' + str(round(ph, 3)), scale=0.03, color=(0,0,0), figure=fig)
+
+        mlab.axes(pts, xlabel='a', ylabel='b', zlabel='c\'')
+        mlab.colorbar(surf, orientation='vertical') 
+
+
+        lut = lsqsbs(lats.ravel(), lons.ravel(), ql_new.ravel(), knotst, knotsp)
+        fig = mlab.figure(size=(400*2, 350*2)) 
+        # fit
+        pts = mlab.points3d(x_fine.ravel(), y_fine.ravel(), z_fine.ravel(), ql_new.ravel(), colormap='viridis', scale_mode='none', scale_factor=0.0)
+        # measured data
+        mlab.points3d(x, y, z, ql, colormap='viridis', scale_mode='none', scale_factor=0.03)
+        tri = mlab.pipeline.delaunay3d(pts)
+        edges = mlab.pipeline.extract_edges(tri)
+
+        tri_smooth = mlab.pipeline.poly_data_normals(tri) # smooths delaunay triangulation mesh
+        surf = mlab.pipeline.surface(tri_smooth, colormap='viridis')
+        
+        #for x_val, y_val, z_val, ql_val, th, ph in zip(x_fine.ravel(), y_fine.ravel(), z_fine.ravel(), ql_new.ravel(), lats.ravel(), lons.ravel()):
+        #    if th==0 or ph==0:
+        #        mlab.text3d(x_val, y_val, z_val, str(round(ql_val,3)), scale=0.03, color=(0,0,0), figure=fig)
+        #        #mlab.text3d(x_val, y_val, z_val, str(round(th, 3)) + ', ' + str(round(ph, 3)), scale=0.03, color=(0,0,0), figure=fig)
+
         mlab.axes(pts, xlabel='a', ylabel='b', zlabel='c\'')
         mlab.colorbar(surf, orientation='vertical') 
         mlab.show()
