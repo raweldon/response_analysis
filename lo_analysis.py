@@ -1129,16 +1129,25 @@ def rbf_interp_heatmap(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, t
 def sph_harm_fit(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV, plot_pulse_shape, multiplot, save_multiplot):
     from scipy.special import sph_harm
 
-    def get_coeff_names(order):
-        # return list of coefficient names for a given order
+    def get_coeff_names(order, central_idx_only):
+        ''' return list of coefficient names for a given order
+            set central_idx_only = True if only using central index terms
+        '''
         names, order_coeff = [], []
-        for o in range(0, order + 1):
-            coeff_no = 2*o + 1
-            idx = coeff_no - o - 1
-            for i in range(0, coeff_no):
-                names.append('c_' + str(i) + str(o))
-                order_coeff.append((o, i - idx))
-        return names, order_coeff
+
+        if central_idx_only:
+            for o in range(0, order + 1):
+                names.append('c_' + str(o) + str(o))
+                order_coeff.append((o, o))
+            return names, order_coeff
+        else:
+            for o in range(0, order + 1):
+                coeff_no = 2*o + 1
+                idx = coeff_no - o - 1
+                for i in range(0, coeff_no):
+                    names.append('c_' + str(i) + str(o))
+                    order_coeff.append((o, i - idx))
+            return names, order_coeff
 
     def add_params(names):
         # create parameter argument for lmfit
@@ -1196,17 +1205,18 @@ def sph_harm_fit(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n
         x, y, z = xyz_u.T
 
         ## convert back to spheical coords for sph harmonics fitting
-        theta = np.arccos(z)
+        #theta = np.arccos(z)
+        theta = np.arctan(np.sqrt(x**2 + y**2)/z)
         phi = np.arctan(y/x)
         ## check for nan in phi
         nans = np.argwhere(np.isnan(phi))
         for nan in nans:
             phi[nan] = phi[nan-1]
-        print phi
+
         # lmfit
-        for i in range(1, 8):
+        for i in range(4, 5):
             order = i
-            names, order_coeff = get_coeff_names(order)
+            names, order_coeff = get_coeff_names(order, central_idx_only=False)
             fit_params = add_params(names)
             fit_kws={'nan_policy': 'omit'}
             res = lmfit.minimize(minimize, fit_params, args=(ql, theta, phi, names, order_coeff), **fit_kws)
@@ -1239,6 +1249,165 @@ def sph_harm_fit(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n
             mlab.view(azimuth=0, elevation=90, distance=7.5, figure=fig)  
             mlab.title('Order =' + str(i))
             fig.scene.disable_render = False   
+        mlab.show()
+
+def lsq_sph_biv_spl(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV, plot_pulse_shape, multiplot, save_multiplot):
+    from scipy.interpolate import LSQSphereBivariateSpline as lsqsbs
+    from scipy.interpolate import SmoothSphereBivariateSpline as ssbs
+
+    data_bvert = pd_load(fin1, p_dir)
+    data_bvert = split_filenames(data_bvert)
+    data_cpvert = pd_load(fin2, p_dir)
+    data_cpvert = split_filenames(data_cpvert)
+
+    for d, det in enumerate(dets):       
+        print '\ndet_no =', det, 'theta_n =', theta_n[d]
+        df_b_mapped = map_data_3d(data_bvert, det, bvert_tilt, b_up, theta_n[d], phi_n[d], beam_11MeV) 
+        df_b_mapped_mirror = map_data_3d(data_bvert, det, bvert_tilt, np.asarray(((1,0,0), (0,1,0), (0,0,-1))), theta_n[d], phi_n[d], beam_11MeV)
+        df_cp_mapped = map_data_3d(data_cpvert, det, cpvert_tilt, cp_up, theta_n[d], phi_n[d], beam_11MeV)
+        df_cp_mapped_mirror = map_data_3d(data_cpvert, det, cpvert_tilt, np.asarray(((-1,0,0), (0,0,-1), (0,1,0))), theta_n[d], phi_n[d], beam_11MeV)
+
+        # convert to proper frame (b and cp orientations are different)
+        theta_b = np.concatenate([df_b_mapped.theta.values, df_b_mapped_mirror.theta.values])
+        theta_cp = np.concatenate([df_cp_mapped.theta.values, df_cp_mapped_mirror.theta.values])
+        phi_b = np.concatenate([df_b_mapped.phi.values, df_b_mapped_mirror.phi.values])
+        phi_cp = np.concatenate([df_cp_mapped.phi.values, df_cp_mapped_mirror.phi.values])
+
+        x_b, y_b, z_b = polar_to_cartesian(theta_b, phi_b, b_up, cp_up)
+        x_cp, y_cp, z_cp = polar_to_cartesian(theta_cp, phi_cp, cp_up, cp_up)
+
+        x = np.concatenate((x_b, x_cp))
+        y = np.concatenate((y_b, y_cp))
+        z = np.concatenate((z_b, z_cp))
+        ql = np.concatenate([df_b_mapped.ql_mean.values, df_b_mapped_mirror.ql_mean.values, df_cp_mapped.ql_mean.values, df_cp_mapped_mirror.ql_mean.values])
+        tilts = np.concatenate([df_b_mapped.tilt.values, df_b_mapped_mirror.tilt.values, df_cp_mapped.tilt.values, df_cp_mapped_mirror.tilt.values])
+
+        ## remove repeated points
+        xyz = np.array(zip(x, y, z))
+        xyz_u, indices = np.unique(xyz, axis=0, return_index=True)
+        ql = ql[indices]
+        tilts = tilts[indices]
+        x, y, z = xyz_u.T
+
+        ## convert back to spheical coords for sph harmonics fitting
+        theta = np.arccos(z)
+        #theta = np.arctan(np.sqrt(x**2 + y**2)/z)
+        phi = []
+        for a, b in zip(x, y):
+            if a < 0 and b >= 0:
+                p = np.arctan(b/a) + np.pi
+            elif a < 0 and b < 0:
+                p = np.arctan(b/a) - np.pi
+            elif a == 0 and b > 0:
+                p = np.pi/2.
+            elif a == 0 and b < 0:
+                p = -np.pi/2. 
+            else:
+                p = np.arctan(b/a)
+            phi.append(p)
+        phi = np.array(phi)     
+
+
+        ## check for nan in phi
+        nans = np.argwhere(np.isnan(phi))
+        for nan in nans:
+            phi[nan] = phi[nan-1]
+
+        phi = phi + np.pi
+
+        x = np.sin(theta)*np.cos(phi)
+        y = np.sin(theta)*np.sin(phi)
+        z = np.cos(theta)
+        fig = mlab.figure(size=(400*2, 350*2)) 
+        pts = mlab.points3d(x, y, z, ql, colormap='viridis', scale_mode='none', scale_factor=0.03)
+        for x_val, y_val, z_val, ql_val, th, ph in zip(x, y, z, ql, theta, phi):
+            if th==0 or ph==0:
+                #mlab.text3d(x_val, y_val, z_val, str(round(ql_val,3)), scale=0.03, color=(0,0,0), figure=fig)
+                mlab.text3d(x_val, y_val, z_val, str(round(th, 3)) + ', ' + str(round(ph, 3)), scale=0.03, color=(0,0,0), figure=fig)
+                print th, ph, ql_val
+
+        # interpolate 
+        ## set interpolator object with mesh 
+        knotst = np.linspace(0, np.pi, 31)
+        knotsp = np.linspace(0, 2*np.pi, 31)
+        lats, lons = np.meshgrid(knotst, knotsp)
+
+        knotst[0] += 0.0001
+        knotst[-1] -= 0.00001
+        knotsp[0] += 0.00001
+        knotsp[-1] -= 0.00001
+
+        #lut = lsqsbs(theta, phi, ql, knotst, knotsp)
+        #for t, p, q in sorted(zip(theta, phi, ql)):
+        #    print t, p, q
+        lut = ssbs(theta, phi, ql, s=1)
+        ql_new = []
+        for t, p in zip(theta, phi):
+            ql_new.append(lut(t, p)[0][0])
+        ql_new = np.array(ql_new)
+
+        fig = mlab.figure(size=(400*2, 350*2)) 
+        pts = mlab.points3d(x, y, z, ql_new, colormap='viridis', scale_mode='none', scale_factor=0.03)
+
+        x_fine = np.sin(lats.ravel()) * np.cos(lons.ravel())
+        y_fine = np.sin(lats.ravel()) * np.sin(lons.ravel())
+        #for i, j, k in zip(np.sin(lats.ravel()), np.sin(lons.ravel()), np.sin(lats.ravel())*np.sin(lons.ravel())):
+        #    print i, j, k
+        #print '\n\n'
+        z_fine = np.cos(lats.ravel())
+
+        #for k1, k2, l in zip(lats.ravel(), lons.ravel(), lut(knotst, knotsp).ravel()):
+        #    if k2 == 0 or (k2>np.pi-0.01 and k2<np.pi+0.01):
+        #        print k1, k2, l
+
+        # plot
+        fig = mlab.figure(size=(400*2, 350*2)) 
+        fig.scene.disable_render = True
+        pts = mlab.points3d(x_fine, y_fine, z_fine, lut(knotst, knotsp).ravel(), colormap='viridis', scale_mode='none', scale_factor=0.03)
+
+        for x_val, y_val, z_val, ql_val, th, ph in zip(x_fine, y_fine, z_fine, lut(knotst, knotsp).ravel(), lats.ravel(), lons.ravel()):
+            #mlab.text3d(x_val, y_val, z_val, str(ql_val), scale=0.03, color=(0,0,0), figure=fig)
+            if ph==0 or (ph>np.pi-0.01 and ph<np.pi+0.01):
+                mlab.text3d(x_val, y_val, z_val, str(round(ql_val,3)), scale=0.03, color=(0,0,0), figure=fig)
+                #mlab.text3d(x_val, y_val, z_val, str(round(th, 3)) + ', ' + str(round(ph, 3)), scale=0.03, color=(0,0,0), figure=fig)
+
+        ## delaunay triagulation (mesh, interpolation)
+        tri = mlab.pipeline.delaunay3d(pts)
+        edges = mlab.pipeline.extract_edges(tri)
+
+        tri_smooth = mlab.pipeline.poly_data_normals(tri) # smooths delaunay triangulation mesh
+        surf = mlab.pipeline.surface(tri_smooth, colormap='viridis')
+        
+        mlab.axes(pts, xlabel='a', ylabel='b', zlabel='c\'')
+        mlab.colorbar(surf, orientation='vertical') 
+        mlab.view(azimuth=0, elevation=90, distance=7.5, figure=fig)  
+        #mlab.title('Order =' + str(i))
+        fig.scene.disable_render = False   
+
+        x_fine = np.sin(lats) * np.cos(lons)
+        y_fine = np.sin(lats) * np.sin(lons)
+        z_fine = np.cos(lats)
+
+        ql_new = []
+        print lats.shape
+        for t, p in zip(lats.ravel(), lons.ravel()):
+            ql_new.append(lut(t, p)[0][0])
+        ql_new = np.reshape(np.array(ql_new), (31, 31))
+
+        fig = mlab.figure(size=(400*2, 350*2)) 
+        pts = mlab.points3d(x_fine.ravel(), y_fine.ravel(), z_fine.ravel(), ql_new.ravel(), colormap='viridis', scale_mode='none', scale_factor=0.03)
+
+
+        fig = mlab.figure(size=(400*2, 350*2)) 
+        mlab.mesh(x_fine, y_fine, z_fine, scalars=ql_new, colormap='viridis')
+        tri = mlab.pipeline.delaunay3d(pts)
+        edges = mlab.pipeline.extract_edges(tri)
+
+        tri_smooth = mlab.pipeline.poly_data_normals(tri) # smooths delaunay triangulation mesh
+        surf = mlab.pipeline.surface(tri_smooth, colormap='viridis')
+        
+        mlab.axes(pts, xlabel='a', ylabel='b', zlabel='c\'')
+        mlab.colorbar(surf, orientation='vertical') 
         mlab.show()
 
 def main():
@@ -1315,8 +1484,12 @@ def main():
     if rbf_interp_heatmaps:
         rbf_interp_heatmap(fin[0], fin[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, plot_pulse_shape=True, multiplot=False, save_multiplot=False)
 
+    ## spherical harmonics fit to lo data
     if spherical_harmonics:
         sph_harm_fit(fin[0], fin[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, plot_pulse_shape=False, multiplot=False, save_multiplot=False)
+
+    if lsq_sph_biv_spline:
+        lsq_sph_biv_spl(fin[0], fin[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, plot_pulse_shape=False, multiplot=False, save_multiplot=False)
 
 if __name__ == '__main__':
     # check 3d scatter plots for both crystals
@@ -1349,6 +1522,10 @@ if __name__ == '__main__':
     # rbf interpolated heatmaps
     rbf_interp_heatmaps = False
 
-    spherical_harmonics=True
+    # fit using spherical hamonics
+    spherical_harmonics = False
+
+    # interpolation using least-squares bivariat spline approximation
+    lsq_sph_biv_spline = True
 
     main()

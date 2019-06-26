@@ -85,3 +85,6 @@
     * uba_pmt_vs_new.py - compares june 2016 data with current data 
         * looks at effect of saturation -- large
     
+* 6/22/2019
+    * added spherical hamonics fit to light output data
+    * need to determine how many terms are needed for the data
