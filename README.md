@@ -96,3 +96,10 @@
     * does not work for lo values < 1
         * 20 and 30 deg lo, psd
         * will scaling correct it?
+    * fixed pickle issue with pulls from github
+        * pandas.read_pickle() did not properly assess how to read the pickles
+        * corrected by adding:
+            'with open(path_to_file, 'r') as f:
+                data = pickle.load(f)         '
+            
+          
