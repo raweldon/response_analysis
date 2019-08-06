@@ -1444,7 +1444,7 @@ def legendre_poly_fit(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, th
             legendre_p += cp*lpmv(oc[1], oc[0], np.sin(theta)) # real value of spherical hamonics
 
         legendre = legendre_t * legendre_p
-        return (ql - legendre)/ql_uncert
+        return (ql - legendre)**2/ql_uncert**2
 
     data_bvert = pd_load(fin1, p_dir)
     data_bvert = split_filenames(data_bvert)
@@ -1491,24 +1491,23 @@ def legendre_poly_fit(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, th
         for a, b in zip(x, y):
             #if a < 0 and b >= 0:
             #    p = np.arctan(b/a) + np.pi
-            #    print p
+            #    #print p
             #elif a < 0 and b < 0:
             #    p = np.arctan(b/a) - np.pi
             #elif a == 0 and b > 0:
             #    p = np.pi/2.
             #elif a == 0 and b < 0:
             #    p = -np.pi/2. 
-            #else:
             if (abs(a) < 1e-5 and abs(b) < 1e-5):
                 print a, b
                 p = 0.
             else:
-                p = np.arctan(b/a)
+                p = np.arctan(b/a) 
             phi.append(p)
         phi = np.array(phi)   
 
         # lmfit
-        for i in range(5, 6):
+        for i in range(2, 3):
             order = i
             # generate coefficients for phi and theta terms
             names_t, order_coeff_t = get_coeff_names(order, central_idx_only=True)
@@ -1524,14 +1523,20 @@ def legendre_poly_fit(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, th
                 leg_poly_t += par.value*lpmv(order_coeff_t[idx][1], order_coeff_t[idx][0], np.cos(phi))
                 leg_poly_p += par.value*lpmv(order_coeff_t[idx][1], order_coeff_t[idx][0], np.sin(theta))
             legendre_poly_fit = leg_poly_t * leg_poly_p
-            for l, q in zip(legendre_poly_fit, sorted(ql)):
-                print l, q
+            ql_idx = np.argsort(ql)
+            legendre_poly_sorted = sorted(legendre_poly_fit)
+            for l, q in zip(sorted(legendre_poly_fit), sorted(ql)):
+                if q == max(sorted(ql)):
+                    print l, q
+                if q == min(sorted(ql)):
+                    print l, q
+                #print l, q
 
 
             # plot
             fig = mlab.figure(size=(400*2, 350*2)) 
             fig.scene.disable_render = True
-            pts = mlab.points3d(x, y, z, legendre_poly_fit, colormap='viridis', scale_mode='none', scale_factor=0.03)
+            pts = mlab.points3d(x[ql_idx], y[ql_idx], z[ql_idx], legendre_poly_sorted, colormap='viridis', scale_mode='none', scale_factor=0.03)
 
             ## delaunay triagulation (mesh, interpolation)
             tri = mlab.pipeline.delaunay3d(pts)
@@ -1555,7 +1560,102 @@ def legendre_poly_fit(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, th
             mlab.view(azimuth=0, elevation=90, distance=7.5, figure=fig)  
             mlab.title('Order =' + str(i))
             fig.scene.disable_render = False   
+
+ 
+            ## tried to plot results on a grid -- not really working ... 
+            mesh_theta, mesh_phi = np.mgrid[0:2*np.pi:20j, 0:2*np.pi:20j]
+            #new_theta = np.linspace(0, 2*np.pi, 200)
+            #new_phi = np.linspace(0, 2*np.pi, 200)
+            #mesh_theta, mesh_phi = np.meshgrid(new_theta, new_phi)
+            mesh_x = np.cos(mesh_phi)
+            mesh_y = np.sin(mesh_phi)*np.sin(mesh_theta)
+            mesh_z = np.sin(mesh_phi)*np.cos(mesh_theta)
+
+            leg_poly_t, leg_poly_p = 0, 0
+            for idx, (name, par) in enumerate(res.params.items()):
+                leg_poly_t += par.value*lpmv(order_coeff_t[idx][1], order_coeff_t[idx][0], np.cos(mesh_phi))
+                leg_poly_p += par.value*lpmv(order_coeff_t[idx][1], order_coeff_t[idx][0], np.sin(mesh_theta))
+            legendre_poly_fit = leg_poly_t * leg_poly_p
+
+            fig = mlab.figure(size=(400*2, 350*2)) 
+            pts = mlab.points3d(x[ql_idx], y[ql_idx], z[ql_idx], legendre_poly_sorted, colormap='viridis', scale_mode='none', scale_factor=0.03)
+
+            # sort legendre output
+            legendre_poly_fit = np.ravel(legendre_poly_fit)
+            leg_idx = np.argsort(legendre_poly_fit)
+            legendre_poly_sorted = np.reshape(sorted(legendre_poly_fit), (20, 20))
+            mesh_x = np.reshape(np.ravel(mesh_x)[leg_idx], (20, 20))
+            mesh_y = np.reshape(np.ravel(mesh_y)[leg_idx], (20, 20))
+            mesh_z = np.reshape(np.ravel(mesh_z)[leg_idx], (20, 20))
+
+            mesh = mlab.surf(mesh_x, mesh_y, mesh_z, legendre_poly_sorted, colormap='viridis')
+
         mlab.show()
+
+def lambertian(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV, plot_pulse_shape, multiplot, save_multiplot):
+    data_bvert = pd_load(fin1, p_dir)
+    data_bvert = split_filenames(data_bvert)
+    data_cpvert = pd_load(fin2, p_dir)
+    data_cpvert = split_filenames(data_cpvert)
+
+    for d, det in enumerate(dets):       
+        #if d > 0 :
+        #    continue
+        print '\ndet_no =', det, 'theta_n =', theta_n[d]
+        df_b_mapped = map_data_3d(data_bvert, det, bvert_tilt, b_up, theta_n[d], phi_n[d], beam_11MeV) 
+        df_b_mapped_mirror = map_data_3d(data_bvert, det, bvert_tilt, np.asarray(((1,0,0), (0,1,0), (0,0,-1))), theta_n[d], phi_n[d], beam_11MeV)
+        df_cp_mapped = map_data_3d(data_cpvert, det, cpvert_tilt, cp_up, theta_n[d], phi_n[d], beam_11MeV)
+        df_cp_mapped_mirror = map_data_3d(data_cpvert, det, cpvert_tilt, np.asarray(((-1,0,0), (0,0,-1), (0,1,0))), theta_n[d], phi_n[d], beam_11MeV)
+
+        # convert to proper frame (b and cp orientations are different)
+        theta_b = np.concatenate([df_b_mapped.theta.values, df_b_mapped_mirror.theta.values])
+        theta_cp = np.concatenate([df_cp_mapped.theta.values, df_cp_mapped_mirror.theta.values])
+        phi_b = np.concatenate([df_b_mapped.phi.values, df_b_mapped_mirror.phi.values])
+        phi_cp = np.concatenate([df_cp_mapped.phi.values, df_cp_mapped_mirror.phi.values])
+
+        x_b, y_b, z_b = polar_to_cartesian(theta_b, phi_b, b_up, cp_up)
+        x_cp, y_cp, z_cp = polar_to_cartesian(theta_cp, phi_cp, cp_up, cp_up)
+
+        x = np.concatenate((x_b, x_cp))
+        y = np.concatenate((y_b, y_cp))
+        z = np.concatenate((z_b, z_cp))
+        ql = np.concatenate([df_b_mapped.ql_mean.values, df_b_mapped_mirror.ql_mean.values, df_cp_mapped.ql_mean.values, df_cp_mapped_mirror.ql_mean.values])
+        ql_uncert = np.concatenate([df_b_mapped.ql_abs_uncert.values, df_b_mapped_mirror.ql_abs_uncert.values, df_cp_mapped.ql_abs_uncert.values, 
+                                    df_cp_mapped_mirror.ql_abs_uncert.values])
+        tilts = np.concatenate([df_b_mapped.tilt.values, df_b_mapped_mirror.tilt.values, df_cp_mapped.tilt.values, df_cp_mapped_mirror.tilt.values])
+
+        ## remove repeated points
+        xyz = np.array(zip(x, y, z))
+        xyz_u, indices = np.unique(xyz, axis=0, return_index=True)
+        ql = ql[indices]
+        ql_uncert = ql_uncert[indices]
+        tilts = tilts[indices]
+        x, y, z = xyz_u.T
+
+        # convert to lambertian projection (from https://en.wikipedia.org/wiki/Lambert_azimuthal_equal-area_projection)
+        X, Y = [], []
+        for xi, yi, zi in zip(x, y, z):
+            Xi = np.sqrt(2/(1-zi))*xi
+            Yi = np.sqrt(2/(1-zi))*yi
+            if np.isnan(Xi) or np.isnan(Yi):
+                zi -= 0.0001
+                Xi = np.sqrt(2/(1-zi))*xi
+                Yi = np.sqrt(2/(1-zi))*yi    
+            X.append(Xi)
+            Y.append(Yi)
+        X = np.array(X)
+        Y = np.array(Y)
+
+        grid_x, grid_y = np.mgrid[-2:2:1000j, -2:2:1000j]
+        methods = ('nearest', 'linear', 'cubic')
+        for method in methods:
+            interp = scipy.interpolate.griddata((X, Y), ql, (grid_x, grid_y), method=method)
+            plt.figure()
+            plt.imshow(interp.T, extent=(-2,2,-2,2), origin='lower', cmap='viridis')
+            plt.scatter(X, Y, c=ql, cmap='viridis')
+            plt.colorbar()
+        plt.show()
+
 
 def main():
     cwd = os.getcwd()
@@ -1641,6 +1741,9 @@ def main():
     if legendre_poly:
         legendre_poly_fit(fin[0], fin[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, plot_pulse_shape=False, multiplot=False, save_multiplot=False)
 
+    if lambertian_proj:
+        lambertian(fin[0], fin[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, plot_pulse_shape=False, multiplot=False, save_multiplot=False)
+
 if __name__ == '__main__':
     # check 3d scatter plots for both crystals
     scatter_11 = False
@@ -1679,6 +1782,9 @@ if __name__ == '__main__':
     lsq_sph_biv_spline = False
 
     # legendre polynomial fit
-    legendre_poly = True
+    legendre_poly = False
+
+    # Lambertian projection
+    lambertian_proj = True
 
     main()
