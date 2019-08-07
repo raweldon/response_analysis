@@ -21,11 +21,12 @@ import os
 from mayavi import mlab
 import pylab as plt
 import scipy
-from scipy.spatial import Delaunay
-from scipy.ndimage import gaussian_filter
 import lmfit
 import pickle
 import dask.array as da
+import sys
+sys.path.insert(1, 'C:/Users/raweldon/Research/TUNL/git_programs/stilbene_uncertainties/')
+from coinc_scatter_uncerts_final import calc_ep_uncerts
 
 def pd_load(filename, p_dir):
     # converts pickled data into pandas DataFrame
@@ -149,7 +150,7 @@ def tilt_check(det_data, dets, tilts, pickle_name, cwd, p_dir, beam_11MeV, print
 
     sin_params, a_axis_data, cp_b_axes_data = [], [], []
     sin_params.append(['tilt', 'det', 'a', 'b', 'phi'])
-    a_axis_data.append(['crystal', 'energy', 'det', 'tilt', 'ql', 'abs_uncert', 'fit_ql'])
+    a_axis_data.append(['crystal', 'energy', 'det', 'tilt', 'ql', 'abs_uncert', 'fit_ql', 'counts'])
     for tilt in tilts:
         tilt_df = det_data.loc[(det_data.tilt == str(tilt))]
 
@@ -193,6 +194,7 @@ def tilt_check(det_data, dets, tilts, pickle_name, cwd, p_dir, beam_11MeV, print
             else:
                 data = det_df.ql_mean
                 data_uncert = det_df.ql_abs_uncert
+                counts = det_df.counts
 
             # fit
             res = fit_tilt_data(data.values, angles, print_report=False)
@@ -207,10 +209,12 @@ def tilt_check(det_data, dets, tilts, pickle_name, cwd, p_dir, beam_11MeV, print
             # get lo along a, b, c' axes
             if a_axis_dir[d] in angles:
                 a_axis_ql = data.iloc[np.where(angles == a_axis_dir[d])].values[0]
-                a_axis_data.append([name[0], name[1], name[4], tilt, a_axis_ql, data_uncert.iloc[np.where(angles == a_axis_dir[d])].values[0], y_vals.max()])
+                a_axis_data.append([name[0], name[1], name[4], tilt, a_axis_ql, data_uncert.iloc[np.where(angles == a_axis_dir[d])].values[0], 
+                                   y_vals.max(), counts.iloc[np.where(angles == a_axis_dir[d])].values[0]])
             if cp_b_axes_dir[d] in angles:
                 cp_b_ql = data.iloc[np.where(angles == cp_b_axes_dir[d])].values[0]
-                cp_b_axes_data.append([name[0], name[1], name[4], tilt, cp_b_ql, data_uncert.iloc[np.where(angles == cp_b_axes_dir[d])].values[0], y_vals.min()])
+                cp_b_axes_data.append([name[0], name[1], name[4], tilt, cp_b_ql, data_uncert.iloc[np.where(angles == cp_b_axes_dir[d])].values[0], 
+                                       y_vals.min(), counts.iloc[np.where(angles == cp_b_axes_dir[d])].values[0]])
 
             # plot same det angles together
             if show_plots:
@@ -608,6 +612,15 @@ def plot_fitted_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up,
             mlab.show()        
 
 def compare_a_axis_recoils(fin, dets, cwd, p_dir, plot_by_det, save_plots):
+
+    def remove_cal(lo, m, b):
+        return m*np.array(lo) + b
+
+    def new_cal(lo, m, b, new_m, new_b):
+        y = m*np.array(lo) + b
+        return (y - new_b)/new_m
+
+    a_qls, tilts_arr = [], []
     for f in fin:
         if '11' in f:
             beam_11MeV = True
@@ -681,6 +694,35 @@ def compare_a_axis_recoils(fin, dets, cwd, p_dir, plot_by_det, save_plots):
             plt.ylabel('light output (MeVee)')
             plt.xlim(-50, 50)
             plt.title(f)
+        
+        a_qls.append(a_axis_df.ql.values)
+        tilts_arr.append(a_axis_df.tilt.values)
+    
+    # m and E_0 for 11 MeV cpvert
+    m = 8662.28
+    b = -166.65
+    new_m = 8580
+    mb = 8598.74
+    bb = -155.15
+    new_mb = 8730
+    rel_diff = []
+    print '\n11 MeV a-axis LO rel diff between bvert and cpvert crystals\n'
+    print ' tilt  LO_bvert  LO_cpvert  rel_diff'
+    for bvert_11, cpvert_11, tilt in zip(a_qls[0], a_qls[1], tilts_arr[0]):
+        cpvert_11 = new_cal(cpvert_11, m, b, new_m, b)
+        bvert_11 = new_cal(bvert_11, mb, bb, new_mb, bb)
+        print '{:^5} {:>8} {:>9} {:>8}%'.format(tilt, bvert_11, cpvert_11, round((bvert_11 - cpvert_11)/(bvert_11 + cpvert_11)*200, 2))
+        rel_diff.append((bvert_11 - cpvert_11)/(bvert_11 + cpvert_11)*200)
+    print'\n rel_diff mean = ', np.mean(rel_diff), '%'   
+
+    print '\n4 MeV a-axis LO rel diff between bvert and cpvert crystals\n'
+    print ' tilt  LO_bvert  LO_cpvert  rel_diff'
+    rel_diff = []
+    for bvert_4, cpvert_4, tilt in zip(a_qls[2], a_qls[3], tilts_arr[2]):
+        print '{:^5} {:>8} {:>9} {:>8}%'.format(tilt, bvert_4, cpvert_4, round((bvert_4 - cpvert_4)/(bvert_4 + cpvert_4)*200, 2))
+        rel_diff.append((bvert_4 - cpvert_4)/(bvert_4 + cpvert_4)*200)
+    print'\n rel_diff mean = ', np.mean(rel_diff), '%'
+
     plt.show()
 
 def plot_ratios(fin, dets, cwd, p_dir, pulse_shape, plot_fit_ratio):
@@ -985,6 +1027,167 @@ def adc_vs_cal_ratios(fin, dets, cwd, p_dir, plot_fit_ratio):
         for e, r, r_adc, r_new in zip(ep, ratio, ratio_adc, ratio_new):
             print '{:^8.2f} {:^8.3f} {:^8.3f} {:^8.2f} {:^8.3f} {:^8.2f}'.format(e, r, r_adc, 100*2*(r_adc - r)/(r_adc+r), r_new, 100*2*(r_adc - r_new)/(r_new + r_adc))
  
+
+    plt.show()
+
+def plot_acp_lo_curves(fin, dets, cwd, p_dir, pulse_shape, plot_fit_data):
+    ''' plot light ouput curves of major axes
+        includes function to remove calibration for checking true shape
+    '''
+
+    def remove_cal(lo, m, b):
+        return m*np.array(lo) + b
+
+    def new_cal(lo, m, b, new_m, new_b):
+        y = m*np.array(lo) + b
+        return (y - new_b)/new_m
+
+    def calc_avg(data, uncert, only_uncert):    
+        if only_uncert:
+                return np.array([np.sqrt((uncert[:6][i]**2 + u**2)/2) for i, u in enumerate(uncert[6:][::-1])])
+        else:                                                                                                                                               
+            avg = np.array((data[:6] + data[6:][::-1]))/2.
+            uncert = np.array([np.sqrt((uncert[:6][i]**2 + u**2)/2) for i, u in enumerate(uncert[6:][::-1])])
+            return avg, uncert
+
+    for i, f in enumerate(fin):
+        label_fit = ['', '', '', 'fit ratios']
+        label = [', b-vert', ', c\'-vert',  '', '']
+        a_axis = ['a-axis', 'a-axis', '', '']
+        cp_b_axis = ['cp-axis', 'b-axis', '', '']
+        if '11' in f:
+            beam_11MeV = True
+            angles = [70, 60, 50, 40, 30, 20, 20, 30, 40, 50, 60, 70]
+            dists = [66.4, 63.8, 63.2, 63.6, 64.9, 65.8, 66.0, 65.3, 63.4, 62.7, 64.3, 66.5]
+            p_erg = 11.325*np.sin(np.deg2rad(angles))**2
+        else:
+            beam_11MeV = False
+            angles = [60, 40, 20, 30, 50, 70]
+            dists = [63.8, 63.6, 65.8, 65.3, 62.7, 66.5]
+            p_erg = 4.825*np.sin(np.deg2rad(angles))**2
+        if 'bvert' in f:
+            #tilts = [0, 45, -45, 30, -30, 15, -15]
+            tilts = [45]
+            color = 'b'
+            shape = '^'
+            if '11MeV' in f:
+                m = 8598.74  # 8/6/19 - calibration terms from /home/radians/raweldon/tunl.2018.1_analysis/stilbene_final/lo_calibration/gamma_calibration.py
+                b = -155.15
+                cal_476 = remove_cal(0.476, m, b)
+                new_m = 8750
+            if '4MeV' in f:
+                m = 25868.35
+                b = -544.24
+                cal_476 = remove_cal(0.476, m, b)
+                new_m = m
+        else:
+            #tilts = [0, 30, -30, 15, -15]
+            tilts = [0]
+            color = 'g'
+            shape = 's'
+            if '11MeV' in f:
+                m = 8662.28  # 8/6/19 - calibration terms from /home/radians/raweldon/tunl.2018.1_analysis/stilbene_final/lo_calibration/gamma_calibration.py
+                b = -166.65
+                cal_476 = remove_cal(0.476, m, b)
+                new_m = 8600
+            if '4MeV' in f:
+                m = 26593.35
+                b = -534.64
+                cal_476 = remove_cal(0.476, m, b)
+                new_m = 26000
+
+        data = pd_load(f, p_dir)
+        data = split_filenames(data)  
+        a_axis_df, cp_b_axes_df = tilt_check(data, dets, tilts, f, cwd, p_dir, beam_11MeV, print_max_ql=False, get_a_data=True, 
+                                             pulse_shape=pulse_shape, delayed=False, prompt=False, show_plots=False, save_plots=False, save_pickle=False)
+        print a_axis_df.to_string()
+        print cp_b_axes_df.to_string()
+    
+        if beam_11MeV:
+            a_ql = a_axis_df.ql.values
+            a_uncert = a_axis_df.abs_uncert.values
+            a_fit_ql = a_axis_df.fit_ql.values
+            a_ep_err = calc_ep_uncerts(a_axis_df.counts.values, angles, dists, beam_11MeV, print_unc=False) 
+            a_ep_err = calc_avg(None, a_ep_err, only_uncert=True)
+            cp_b_ql = cp_b_axes_df.ql.values
+            cp_b_uncert = cp_b_axes_df.abs_uncert.values
+            cp_b_fit_ql = cp_b_axes_df.fit_ql.values
+            cp_b_ep_err = calc_ep_uncerts(cp_b_axes_df.counts.values, angles, dists, beam_11MeV, print_unc=False) 
+            cp_b_ep_err = calc_avg( None, cp_b_ep_err, only_uncert=True)
+            # plot average light output
+            a_ql, a_uncert = calc_avg(a_ql, a_uncert, only_uncert=False)
+            cp_b_ql, cp_b_uncert = calc_avg(cp_b_ql, cp_b_uncert, only_uncert=False)
+            p_erg = p_erg[:6]
+
+        else:
+            continue
+            # account for skipped detectors with 4 MeV beam measurements
+            a_ql, cp_b_ql, a_uncert, cp_b_uncert, a_fit_ql, cp_b_fit_ql, a_counts, cp_b_counts  = [], [], [], [], [], [], [], []
+            for d, det in enumerate(a_axis_df.det.values):
+                if det in cp_b_axes_df.det.values:
+                    a_ql.append(a_axis_df.ql.iloc[np.where(a_axis_df.det == det)].values)
+                    a_uncert.append(a_axis_df.abs_uncert.iloc[np.where(a_axis_df.det == det)].values)
+                    a_fit_ql.append(a_axis_df.fit_ql.iloc[np.where(a_axis_df.det == det)].values)
+                    a_counts.append(a_axis_df.counts.iloc[np.where(a_axis_df.det == det)].values)
+                    cp_b_ql.append(cp_b_axes_df.ql.iloc[np.where(cp_b_axes_df.det == det)].values)
+                    cp_b_uncert.append(cp_b_axes_df.abs_uncert.iloc[np.where(cp_b_axes_df.det == det)].values)
+                    cp_b_fit_ql.append(cp_b_axes_df.fit_ql.iloc[np.where(cp_b_axes_df.det == det)].values)
+                    cp_b_counts.append(cp_b_axes_df.counts.iloc[np.where(cp_b_axes_df.det == det)].values)
+                else:
+                    continue
+            a_ep_err = calc_ep_uncerts(a_counts, angles, dists, beam_11MeV, print_unc=False)
+            cp_b_ep_err = calc_ep_uncerts(cp_b_counts, angles, dists, beam_11MeV, print_unc=False)
+
+        plt.figure(0)
+        plt.errorbar(p_erg, a_ql, yerr=a_uncert, xerr=a_ep_err, ecolor='black', markerfacecolor='None', fmt=shape, 
+                        markeredgecolor='r', markeredgewidth=1, markersize=7, capsize=1, label= a_axis[i]+label[i])
+        plt.errorbar(p_erg, cp_b_ql, yerr=cp_b_uncert, xerr=cp_b_ep_err, ecolor='black', markerfacecolor='None', fmt=shape, 
+                        markeredgecolor=color, markeredgewidth=1, markersize=7, capsize=1, label=cp_b_axis[i]+label[i])
+    
+        # plot fitted data
+        if plot_fit_data:
+            plt.errorbar(p_erg, a_fit_ql, ecolor='black', markerfacecolor='None', fmt=shape, 
+                        markeredgecolor='r', markeredgewidth=1, markersize=7, capsize=1, label= a_axis[i]+label[i])
+            plt.errorbar(p_erg, cp_b_fit_ql, ecolor='black', markerfacecolor='None', fmt=shape, 
+                        markeredgecolor=color, markeredgewidth=1, markersize=7, capsize=1, label=cp_b_axis[i]+label[i])
+        plt.ylabel('Light output (MeVee)')
+        plt.xlabel('Proton recoil energy (MeV)')     
+        plt.legend(loc=4)
+        plt.ylim(-0.1, 6)
+
+        # plot relative light output 
+        plt.figure(1)
+        plt.errorbar(p_erg, remove_cal(a_ql, m, b)/cal_476, yerr=remove_cal(a_uncert, m, b)/cal_476, ecolor='black', markerfacecolor='None', fmt=shape, 
+                        markeredgecolor='r', markeredgewidth=1, markersize=10, capsize=1, label= a_axis[i]+label[i])
+        plt.errorbar(p_erg, remove_cal(cp_b_ql, m, b)/cal_476, yerr=remove_cal(cp_b_uncert, m, b)/cal_476, ecolor='black', markerfacecolor='None', fmt=shape, 
+                        markeredgecolor=color, markeredgewidth=1, markersize=10, capsize=1, label=cp_b_axis[i]+label[i])
+    
+        # plot fitted data
+        if plot_fit_data:
+            plt.errorbar(p_erg, remove_cal(a_fit_ql, m, b)/cal_476, ecolor='black', markerfacecolor='None', fmt=shape, 
+                            markeredgecolor='r', markeredgewidth=1, markersize=10, capsize=1, label= a_axis[i]+label[i])
+            plt.errorbar(p_erg, remove_cal(cp_b_fit_ql, m, b)/cal_476, ecolor='black', markerfacecolor='None', fmt=shape, 
+                            markeredgecolor=color, markeredgewidth=1, markersize=10, capsize=1, label=cp_b_axis[i]+label[i])
+        plt.yscale('log')
+        plt.xscale('log')
+        plt.xlim(0.4, 12)
+        plt.ylim(0.08, 15)
+        plt.ylabel('Relative light output')
+        plt.xlabel('Proton recoil energy (MeV)')     
+        plt.legend(loc=4)
+
+        plt.figure(2)
+        plt.errorbar(p_erg, new_cal(a_ql, m, b, new_m, b), yerr=a_uncert, ecolor='black', markerfacecolor='None', fmt=shape, 
+                        markeredgecolor='r', markeredgewidth=1, markersize=10, capsize=1, label= a_axis[i]+label[i])
+        plt.errorbar(p_erg, new_cal(cp_b_ql, m, b, new_m, b), yerr=cp_b_uncert, ecolor='black', markerfacecolor='None', fmt=shape, 
+                        markeredgecolor=color, markeredgewidth=1, markersize=10, capsize=1, label=cp_b_axis[i]+label[i])  
+        plt.ylabel('Light output (MeVee)')
+        plt.xlabel('Proton recoil energy (MeV)')     
+        plt.legend(loc=4)
+
+    plt.figure(0)
+    plt.plot((2.5, 14.1), (0.886, 8.981), 'x', color='k', label='Schuster')
+    plt.legend(loc=4)
 
     plt.show()
 
@@ -1656,7 +1859,6 @@ def lambertian(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, 
             plt.colorbar()
         plt.show()
 
-
 def main():
     cwd = os.getcwd()
     p_dir = cwd + '/pickles/'
@@ -1683,7 +1885,7 @@ def main():
 
     # comparison of ql for recoils along the a-axis
     if compare_a_axes:
-        compare_a_axis_recoils(fin, dets, cwd, p_dir, plot_by_det=True, save_plots=False)
+        compare_a_axis_recoils(fin, dets, cwd, p_dir, plot_by_det=False, save_plots=False)
 
     # plot ratios
     if ratios_plot:
@@ -1691,6 +1893,9 @@ def main():
 
     if adc_vs_cal:
         adc_vs_cal_ratios(fin, dets, cwd, p_dir, plot_fit_ratio=True)
+
+    if acp_curves:
+        plot_acp_lo_curves(fin, dets, cwd, p_dir, pulse_shape=False, plot_fit_data=False)
     
     # 3d plotting
     theta_n = [70, 60, 50, 40, 30, 20, 20, 30, 40, 50, 60, 70]
@@ -1753,13 +1958,16 @@ if __name__ == '__main__':
     check_tilt = False
 
     # compare a_axis recoils (all tilts measure ql along a-axis)
-    compare_a_axes = False
+    compare_a_axes = True
 
     # plots a/c' and a/b ql or pulse shape ratios from 0deg measurements
     ratios_plot = False
 
     # analyze relative light output ratios agains calibrated data ratios
     adc_vs_cal = False
+
+    # plot a, cp LO curves
+    acp_curves = True
 
     # plot heatmaps with data points
     heatmap_11 = False 
@@ -1785,6 +1993,6 @@ if __name__ == '__main__':
     legendre_poly = False
 
     # Lambertian projection
-    lambertian_proj = True
+    lambertian_proj = False
 
     main()

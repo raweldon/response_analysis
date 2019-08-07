@@ -101,5 +101,10 @@
         * corrected by adding:
             'with open(path_to_file, 'r') as f:
                 data = pickle.load(f)         '
+
+* 8/6/2019
+    * added plot_acp_lo_curves function
+    * updated compare_a_axis_recoils function to show rel diff between bvert and cpvert a-axis measurements
+        * cpvert is systematically lower -- why? 
             
           
