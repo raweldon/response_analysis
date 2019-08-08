@@ -701,10 +701,10 @@ def compare_a_axis_recoils(fin, dets, cwd, p_dir, plot_by_det, save_plots):
     # m and E_0 for 11 MeV cpvert
     m = 8662.28
     b = -166.65
-    new_m = 8580
+    new_m = 8500
     mb = 8598.74
     bb = -155.15
-    new_mb = 8730
+    new_mb = 8700
     rel_diff = []
     print '\n11 MeV a-axis LO rel diff between bvert and cpvert crystals\n'
     print ' tilt  LO_bvert  LO_cpvert  rel_diff'
@@ -1120,7 +1120,6 @@ def plot_acp_lo_curves(fin, dets, cwd, p_dir, pulse_shape, plot_fit_data):
             p_erg = p_erg[:6]
 
         else:
-            continue
             # account for skipped detectors with 4 MeV beam measurements
             a_ql, cp_b_ql, a_uncert, cp_b_uncert, a_fit_ql, cp_b_fit_ql, a_counts, cp_b_counts  = [], [], [], [], [], [], [], []
             for d, det in enumerate(a_axis_df.det.values):
@@ -1604,7 +1603,13 @@ def lsq_sph_biv_spl(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, thet
         #mlab.show()
 
 def legendre_poly_fit(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV, plot_pulse_shape, multiplot, save_multiplot):
+    ''' Note: abandoned because it does not reproduce max and min LO well (i.e. the LO rations are underpredicted)'''
+
     from scipy.special import lpmv 
+
+    def new_cal(lo, m, b, new_m, new_b):
+        y = m*np.array(lo) + b
+        return (y - new_b)/new_m
 
     def get_coeff_names(order, central_idx_only):
         ''' return list of coefficient names for a given order
@@ -1643,8 +1648,8 @@ def legendre_poly_fit(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, th
         for name_t, name_p, oc in zip(names_t, names_p, order_coeff):
             ct = pars[name_t]
             cp = pars[name_p]
-            legendre_t += ct*lpmv(oc[1], oc[0], np.cos(phi))  # oc[0] = n (degree n>=0), oc[1] = m (order |m| <= n)
-            legendre_p += cp*lpmv(oc[1], oc[0], np.sin(theta)) # real value of spherical hamonics
+            legendre_t += ct*lpmv(oc[1], oc[0], np.cos(theta))  # oc[0] = n (degree n>=0), oc[1] = m (order |m| <= n)
+            legendre_p += cp*lpmv(oc[1], oc[0], np.sin(phi)) # real value of spherical hamonics
 
         legendre = legendre_t * legendre_p
         return (ql - legendre)**2/ql_uncert**2
@@ -1723,18 +1728,25 @@ def legendre_poly_fit(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, th
 
             leg_poly_t, leg_poly_p = 0, 0
             for idx, (name, par) in enumerate(res.params.items()):
-                leg_poly_t += par.value*lpmv(order_coeff_t[idx][1], order_coeff_t[idx][0], np.cos(phi))
-                leg_poly_p += par.value*lpmv(order_coeff_t[idx][1], order_coeff_t[idx][0], np.sin(theta))
+                leg_poly_t += par.value*lpmv(order_coeff_t[idx][1], order_coeff_t[idx][0], np.cos(theta))
+                leg_poly_p += par.value*lpmv(order_coeff_t[idx][1], order_coeff_t[idx][0], np.sin(phi))
+                #print leg_poly_t
             legendre_poly_fit = leg_poly_t * leg_poly_p
             ql_idx = np.argsort(ql)
             legendre_poly_sorted = sorted(legendre_poly_fit)
-            for l, q in zip(sorted(legendre_poly_fit), sorted(ql)):
+            for l, ll, q in zip(legendre_poly_fit, sorted(legendre_poly_fit), sorted(ql)):
+                #print l, ll
                 if q == max(sorted(ql)):
                     print l, q
                 if q == min(sorted(ql)):
                     print l, q
                 #print l, q
 
+            #for i, (q, l, ll, lll) in enumerate(zip(ql_idx, legendre_poly_fit, legendre_poly_fit[ql_idx], legendre_poly_sorted)):
+            #    if i==0:
+            #        print i, l, ll, lll, q 
+            #        continue
+            #    print i, l, ll, lll, q, q-ql_idx[i-1]
 
             # plot
             fig = mlab.figure(size=(400*2, 350*2)) 
@@ -1764,34 +1776,80 @@ def legendre_poly_fit(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, th
             mlab.title('Order =' + str(i))
             fig.scene.disable_render = False   
 
+
+            # TESTS - tried to get the fit to work better, unsuccessful
+            #mesh_theta, mesh_phi = np.mgrid[0.0001:np.pi-0.0001:200j, 0.0001:2*np.pi-0.0001:200j]
+            new_theta = np.linspace(0, np.pi, 500)
+            new_phi = np.linspace(0, 2*np.pi, 500)
+            mesh_theta, mesh_phi = np.meshgrid(new_theta, new_phi)
+            #mesh_x = np.cos(mesh_phi)
+            #mesh_y = np.sin(mesh_phi)*np.sin(mesh_theta)
+            #mesh_z = np.sin(mesh_phi)*np.cos(mesh_theta)
  
-            ## tried to plot results on a grid -- not really working ... 
-            mesh_theta, mesh_phi = np.mgrid[0:2*np.pi:20j, 0:2*np.pi:20j]
-            #new_theta = np.linspace(0, 2*np.pi, 200)
-            #new_phi = np.linspace(0, 2*np.pi, 200)
-            #mesh_theta, mesh_phi = np.meshgrid(new_theta, new_phi)
-            mesh_x = np.cos(mesh_phi)
-            mesh_y = np.sin(mesh_phi)*np.sin(mesh_theta)
-            mesh_z = np.sin(mesh_phi)*np.cos(mesh_theta)
+            mesh_z = np.cos(mesh_theta)
+            mesh_y = np.sin(mesh_theta)*np.sin(mesh_phi)
+            mesh_x = np.sin(mesh_theta)*np.cos(mesh_phi)
 
             leg_poly_t, leg_poly_p = 0, 0
             for idx, (name, par) in enumerate(res.params.items()):
-                leg_poly_t += par.value*lpmv(order_coeff_t[idx][1], order_coeff_t[idx][0], np.cos(mesh_phi))
-                leg_poly_p += par.value*lpmv(order_coeff_t[idx][1], order_coeff_t[idx][0], np.sin(mesh_theta))
+                leg_poly_t += par.value*lpmv(order_coeff_t[idx][1], order_coeff_t[idx][0], np.cos(mesh_theta))
+                leg_poly_p += par.value*lpmv(order_coeff_t[idx][1], order_coeff_t[idx][0], np.sin(mesh_phi))
             legendre_poly_fit = leg_poly_t * leg_poly_p
 
             fig = mlab.figure(size=(400*2, 350*2)) 
             pts = mlab.points3d(x[ql_idx], y[ql_idx], z[ql_idx], legendre_poly_sorted, colormap='viridis', scale_mode='none', scale_factor=0.03)
 
             # sort legendre output
-            legendre_poly_fit = np.ravel(legendre_poly_fit)
-            leg_idx = np.argsort(legendre_poly_fit)
-            legendre_poly_sorted = np.reshape(sorted(legendre_poly_fit), (20, 20))
-            mesh_x = np.reshape(np.ravel(mesh_x)[leg_idx], (20, 20))
-            mesh_y = np.reshape(np.ravel(mesh_y)[leg_idx], (20, 20))
-            mesh_z = np.reshape(np.ravel(mesh_z)[leg_idx], (20, 20))
+            #legendre_poly_fit = np.ravel(legendre_poly_fit)
+            #leg_idx = np.argsort(legendre_poly_fit)
+            #legendre_poly_sorted = np.reshape(sorted(legendre_poly_fit), (15, 15))
+            #mesh_x = np.reshape(np.ravel(mesh_x)[leg_idx], (200, 200))
+            #mesh_y = np.reshape(np.ravel(mesh_y)[leg_idx], (200, 200))
+            #mesh_z = np.reshape(np.ravel(mesh_z)[leg_idx], (200, 200))
 
-            mesh = mlab.surf(mesh_x, mesh_y, mesh_z, legendre_poly_sorted, colormap='viridis')
+            #mesh = mlab.mesh(mesh_x, mesh_y, mesh_z, scalars=legendre_poly_fit, colormap='viridis')
+            #new_x = np.cos(new_phi)
+            #new_y = np.sin(new_phi)*np.sin(new_theta)
+            #new_z = np.sin(new_phi)*np.cos(new_theta)
+
+            new_z = np.cos(new_theta)
+            new_y = np.sin(new_theta)*np.sin(new_phi)
+            new_x = np.sin(new_theta)*np.cos(new_phi)
+
+            new_x = np.ravel(mesh_x)
+            new_y = np.ravel(mesh_y)
+            new_z = np.ravel(mesh_z)
+            new_theta = np.ravel(mesh_theta)
+            new_phi = np.ravel(mesh_phi)
+            legendre_poly_fit = np.ravel(legendre_poly_fit)
+
+            #for mx, my, mz, mtheta, mphi, leg in zip(new_x, new_y, new_z, new_theta, new_phi, legendre_poly_fit):
+            #    #if mz == 1.:
+            #    #print '{:^8.5f} {:>8.5f} {:>8.5f} {:^8.5f} {:>8.5f} {:>8.5f}'.format(mx, my, mz, mtheta, mphi, leg)
+            #    mlab.text3d(mx, my, mz, str(round(mtheta, 3)) + ' ' + str(round(mphi, 3)), scale=0.03, color=(0,0,0), figure=fig)
+            #print min(legendre_poly_fit), max(legendre_poly_fit)
+
+
+            leg_poly_t, leg_poly_p = 0, 0
+            for idx, (name, par) in enumerate(res.params.items()):
+                leg_poly_t += par.value*lpmv(order_coeff_t[idx][1], order_coeff_t[idx][0], np.cos(new_theta))
+                leg_poly_p += par.value*lpmv(order_coeff_t[idx][1], order_coeff_t[idx][0], np.sin(new_phi))
+            legendre_poly_fit = leg_poly_t * leg_poly_p
+
+            #fig = mlab.figure(size=(400*2, 350*2)) 
+            #fig.scene.disable_render = True
+            #pts = mlab.points3d(new_x, new_y, new_z, legendre_poly_fit, colormap='viridis', scale_mode='none', scale_factor=0.03)
+
+            ### delaunay triagulation (mesh, interpolation)
+            #tri = mlab.pipeline.delaunay3d(pts)
+            #edges = mlab.pipeline.extract_edges(tri)
+            ##edges = mlab.pipeline.surface(edges, colormap='viridis')
+
+            #tri_smooth = mlab.pipeline.poly_data_normals(tri) # smooths delaunay triangulation mesh
+            #surf = mlab.pipeline.surface(tri_smooth, colormap='viridis')
+
+            print 'ql_max   ql_min   ratio    fit_max     fit_min     ratio'
+            print max(ql), min(ql), max(ql)/min(ql), max(legendre_poly_fit), min(legendre_poly_fit), max(legendre_poly_fit)/min(legendre_poly_fit) 
 
         mlab.show()
 
@@ -1846,18 +1904,32 @@ def lambertian(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, 
                 Yi = np.sqrt(2/(1-zi))*yi    
             X.append(Xi)
             Y.append(Yi)
-        X = np.array(X)
-        Y = np.array(Y)
+        X = np.array(X)/max(X)
+        Y = np.array(Y)/max(Y)
 
-        grid_x, grid_y = np.mgrid[-2:2:1000j, -2:2:1000j]
-        methods = ('nearest', 'linear', 'cubic')
+        print np.mean(ql_uncert), np.std(ql_uncert)
+        grid_x, grid_y = np.mgrid[-1:1:2000j, -1:1:2000j]
+        #methods = ('nearest', 'linear', 'cubic')
+        methods = ('linear',)
+        plt.rcParams['axes.facecolor'] = 'grey'
+        f = 14
         for method in methods:
             interp = scipy.interpolate.griddata((X, Y), ql, (grid_x, grid_y), method=method)
+            print max(ql), min(ql), max(ql)/min(ql)
             plt.figure()
-            plt.imshow(interp.T, extent=(-2,2,-2,2), origin='lower', cmap='viridis')
+            plt.imshow(interp.T, extent=(-1,1,-1,1), origin='lower', cmap='viridis', interpolation='none')
             plt.scatter(X, Y, c=ql, cmap='viridis')
-            plt.colorbar()
-        plt.show()
+            cbar = plt.colorbar()
+            #print cbar.ax.get_position()
+            plt.text(-0.71, 0.0, 'a', color='r', fontsize=f)
+            plt.text(0.71, 0., 'a', color='r', fontsize=f)
+            plt.text(0, 0.0, 'c\'', color='r', fontsize=f)
+            plt.text(0, 0.713, 'b', color='r', fontsize=f)
+            plt.text(0, -0.713, 'b', color='r', fontsize=f)
+            plt.xticks([])
+            plt.yticks([])
+            plt.tight_layout()
+    plt.show()
 
 def main():
     cwd = os.getcwd()
@@ -1881,7 +1953,7 @@ def main():
             data = pd_load(f, p_dir)
             data = split_filenames(data)
             tilt_check(data, dets, tilts, f, cwd, p_dir, beam_11MeV, print_max_ql=False, get_a_data=True, pulse_shape=False, 
-                       delayed=False, prompt=False, show_plots=False, save_plots=False, save_pickle=True)
+                       delayed=False, prompt=False, show_plots=True, save_plots=False, save_pickle=False)
 
     # comparison of ql for recoils along the a-axis
     if compare_a_axes:
@@ -1955,10 +2027,10 @@ if __name__ == '__main__':
     scatter_4 = False
 
     # check lo for a specific tilt (sinusoids)
-    check_tilt = False
+    check_tilt = True
 
     # compare a_axis recoils (all tilts measure ql along a-axis)
-    compare_a_axes = True
+    compare_a_axes = False
 
     # plots a/c' and a/b ql or pulse shape ratios from 0deg measurements
     ratios_plot = False
@@ -1967,7 +2039,7 @@ if __name__ == '__main__':
     adc_vs_cal = False
 
     # plot a, cp LO curves
-    acp_curves = True
+    acp_curves = False
 
     # plot heatmaps with data points
     heatmap_11 = False 
@@ -1993,6 +2065,6 @@ if __name__ == '__main__':
     legendre_poly = False
 
     # Lambertian projection
-    lambertian_proj = False
+    lambertian_proj = True
 
     main()
