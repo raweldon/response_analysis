@@ -25,7 +25,7 @@ import lmfit
 import pickle
 import dask.array as da
 import sys
-sys.path.insert(1, 'C:/Users/raweldon/Research/TUNL/git_programs/stilbene_uncertainties/')
+sys.path.insert(1, os.getcwd() + '/../stilbene_uncertainties/')
 from coinc_scatter_uncerts_final import calc_ep_uncerts
 
 def pd_load(filename, p_dir):
@@ -95,35 +95,44 @@ def sin_func(x, a, b, phi):
     w = 2 # period is 2
     return a*np.sin(w*(x + phi)) + b
 
-def fit_tilt_data(data, angles, print_report):
-        # sinusoid fit with lmfit
-        angles = [np.deg2rad(x) for x in angles]
-        gmodel = lmfit.Model(sin_func)
-        params = gmodel.make_params(a=1, b=1, phi=0)
-        res = gmodel.fit(data, params=params, x=angles, nan_policy='omit')#, method='nelder')
-        if print_report:
-            print '\n', lmfit.fit_report(res)
-        return res
-
-def get_max_ql_per_det(det_data, dets, tilts):
-    # use to check max_ql values for each tilt per detector (all tilts measure recoils along the a-axis)
-    for det in dets:
-        print '\n-----------\ndet_no ', det, '\n-----------\n'
-        print 'tilt      ql'
-        det_df = det_data.loc[(det_data.det_no == str(det))]
-        for tilt in tilts:
-            tilt_df = det_df.loc[(det_df.tilt == str(tilt))]
-            tilt_df = tilt_df.reset_index()
-            idxmax = tilt_df.ql_mean.idxmax()
-            max_col = tilt_df.iloc[idxmax]
-            print '{:^5} {:>8}'.format(max_col.tilt, max_col.ql_mean)
-
 def tilt_check(det_data, dets, tilts, pickle_name, cwd, p_dir, beam_11MeV, print_max_ql, get_a_data, pulse_shape, delayed, prompt, show_plots, save_plots, save_pickle):
     ''' Use to check lo, pulse shape (pulse_shape=True), or delayed pulse (delayed=True) for a given det and tilt
         Data is fitted with sinusoids
         Sinusoid fit parameters can be saved for later use by setting save_pickle=True
         a and c' axes directions are marked with scatter points
     '''
+
+    def fit_tilt_data(data, angles, print_report):
+            # sinusoid fit with lmfit
+            angles = [np.deg2rad(x) for x in angles]
+            gmodel = lmfit.Model(sin_func)
+            params = gmodel.make_params(a=1, b=1, phi=0.1)
+            params['phi'].max = np.deg2rad(90)
+            params['phi'].min = np.deg2rad(-90)
+            res = gmodel.fit(data, params=params, x=angles, nan_policy='omit')#, method='nelder')
+            if print_report:
+                print '\n', lmfit.fit_report(res)
+            return res
+
+    def get_max_ql_per_det(det_data, dets, tilts):
+        # use to check max_ql values for each tilt per detector (all tilts measure recoils along the a-axis)
+        for det in dets:
+            print '\n-----------\ndet_no ', det, '\n-----------\n'
+            print 'tilt      ql'
+            det_df = det_data.loc[(det_data.det_no == str(det))]
+            for tilt in tilts:
+                tilt_df = det_df.loc[(det_df.tilt == str(tilt))]
+                tilt_df = tilt_df.reset_index()
+                idxmax = tilt_df.ql_mean.idxmax()
+                max_col = tilt_df.iloc[idxmax]
+                print '{:^5} {:>8}'.format(max_col.tilt, max_col.ql_mean)
+    
+    def get_avg_data_to_smooth(angles, pars, d):
+        lo = sin_func(np.deg2rad(angles), pars['a'], pars['b'], pars['phi'])
+        for a, l in zip(angles, lo):
+            print a, l
+
+
     if print_max_ql:
         get_max_ql_per_det(det_data, dets, tilts)
 
@@ -193,19 +202,19 @@ def tilt_check(det_data, dets, tilts, pickle_name, cwd, p_dir, beam_11MeV, print
 
             else:
                 data = det_df.ql_mean
+                print len(data)
                 data_uncert = det_df.ql_abs_uncert
                 counts = det_df.counts
 
             # fit
             res = fit_tilt_data(data.values, angles, print_report=False)
             pars = res.best_values
-            x_vals = np.linspace(0, 200, 100)
+            x_vals = np.linspace(0, 180, 100)
             x_vals_rad = np.deg2rad(x_vals)
             y_vals = sin_func(x_vals_rad, pars['a'], pars['b'], pars['phi'])
             sin_params.append([tilt, det, pars['a'], pars['b'], pars['phi']])
 
             name = re.split('\.|_', det_df.filename.iloc[0])  
-            #print name[0] + '_' + name[1] + '_' + name[2] + '_' + name[4], max(data)
             # get lo along a, b, c' axes
             if a_axis_dir[d] in angles:
                 a_axis_ql = data.iloc[np.where(angles == a_axis_dir[d])].values[0]
@@ -216,12 +225,16 @@ def tilt_check(det_data, dets, tilts, pickle_name, cwd, p_dir, beam_11MeV, print
                 cp_b_axes_data.append([name[0], name[1], name[4], tilt, cp_b_ql, data_uncert.iloc[np.where(angles == cp_b_axes_dir[d])].values[0], 
                                        y_vals.min(), counts.iloc[np.where(angles == cp_b_axes_dir[d])].values[0]])
 
+            # collect measurements with same light output (pulse shape) for smoothing
+            #get_avg_data_to_smooth(angles, pars, d)
+
             # plot same det angles together
             if show_plots:
+                
                 plt.figure(fig_no[d], figsize=(10,8))
                 plt.errorbar(angles, data, yerr=data_uncert.values, ecolor='black', markerfacecolor=color[d], fmt='o', 
                             markeredgecolor='k', markeredgewidth=1, markersize=10, capsize=1, label='det ' + str(det))
-               
+                
                 # annotate
                 for rot, ang, t in zip(det_df.rotation, angles, data):
                     plt.annotate( str(rot) + '$^{\circ}$', xy=(ang, t), xytext=(-3, 10), textcoords='offset points')
@@ -241,6 +254,7 @@ def tilt_check(det_data, dets, tilts, pickle_name, cwd, p_dir, beam_11MeV, print
                 plt.xlabel('rotation angle (degree)')
                 name = name[0] + '_' + name[1] + '_' + name[2] + '_' + name[4]
                 print name
+                print np.rad2deg(pars['phi'])
                 plt.title(name)
                 plt.legend(fontsize=10)
                 if save_plots:
@@ -250,6 +264,52 @@ def tilt_check(det_data, dets, tilts, pickle_name, cwd, p_dir, beam_11MeV, print
                         else:
                             plt.savefig(cwd + '/figures/tilt_plots/' + name + '.png')
                             print 'plots saved to /figures/tilt_plots/' + name + '.png'
+
+                #
+                # testing smoothing and averaging 
+                #
+                plt.figure(fig_no[d] + 10, figsize=(10,8))
+                if d > 5:
+                    if tilt == 0:
+                        shifted_angs = [x + 10 for x in angles[::-1]]
+                        shifted_x = [x + 10 for x in x_vals]
+                        print angles, shifted_angs
+                        if not beam_11MeV:
+                            shifted_angs = [200 - a for a in shifted_angs][::-1]
+                    else:
+                        shifted_angs = angles[::-1]
+                        shifted_x = [x + 10 for x in x_vals]
+                        if not beam_11MeV:
+                            shifted_angs = [190 - a for a in shifted_angs][::-1]
+                    #shifted_x, y_vals = [list(t) for t in zip(*sorted(zip(shifted_x, y_vals)))]
+
+                    plt.errorbar(shifted_angs, data, yerr=data_uncert.values, ecolor='black', markerfacecolor=color[d], fmt='o', 
+                                markeredgecolor='k', markeredgewidth=1, markersize=10, capsize=1, label='det ' + str(det))
+                    plt.plot(shifted_x[::-1], y_vals, '--', color=color[d])
+
+                else:
+                    plt.errorbar(angles, data, yerr=data_uncert.values, ecolor='black', markerfacecolor=color[d], fmt='o', 
+                                markeredgecolor='k', markeredgewidth=1, markersize=10, capsize=1, label='det ' + str(det))
+                    plt.plot(x_vals, y_vals, '--', color=color[d])
+                    # annotate
+                    for rot, ang, t in zip(det_df.rotation, angles, data):
+                        plt.annotate( str(rot) + '$^{\circ}$', xy=(ang, t), xytext=(-3, 10), textcoords='offset points')
+
+                # check a-axis recoils have max ql - 11 and 4 MeV look good
+                #plt.scatter(angles[np.where(angles == a_axis_dir[d])], data.iloc[np.where(angles == a_axis_dir[d])], c='k', s=120, zorder=10, label=a_label[d])
+                #plt.scatter(angles[np.where(angles == cp_b_axes_dir[d])], data.iloc[np.where(angles == cp_b_axes_dir[d])], c='g', s=120, zorder=10, label=min_ql_label[d])
+                                            
+                plt.xlim(-5, 200)
+                if pulse_shape:
+                    plt.ylabel('pulse shape parameter')
+                else:
+                    plt.ylabel('light output (MeVee)')
+                plt.xlabel('rotation angle (degree)')
+                name = name[0] + '_' + name[1] + '_' + name[2] + '_' + name[4]
+                print name
+                plt.title(name)
+                plt.legend(fontsize=10)
+                
         if show_plots:
             plt.show()
 
@@ -2065,6 +2125,6 @@ if __name__ == '__main__':
     legendre_poly = False
 
     # Lambertian projection
-    lambertian_proj = True
+    lambertian_proj = False
 
     main()
