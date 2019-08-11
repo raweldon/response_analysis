@@ -209,7 +209,7 @@ def tilt_check(det_data, dets, tilts, pickle_name, cwd, p_dir, beam_11MeV, print
             # fit
             res = fit_tilt_data(data.values, angles, print_report=False)
             pars = res.best_values
-            x_vals = np.linspace(0, 180, 100)
+            x_vals = np.linspace(0, 190, 100)
             x_vals_rad = np.deg2rad(x_vals)
             y_vals = sin_func(x_vals_rad, pars['a'], pars['b'], pars['phi'])
             sin_params.append([tilt, det, pars['a'], pars['b'], pars['phi']])
@@ -254,7 +254,6 @@ def tilt_check(det_data, dets, tilts, pickle_name, cwd, p_dir, beam_11MeV, print
                 plt.xlabel('rotation angle (degree)')
                 name = name[0] + '_' + name[1] + '_' + name[2] + '_' + name[4]
                 print name
-                print np.rad2deg(pars['phi'])
                 plt.title(name)
                 plt.legend(fontsize=10)
                 if save_plots:
@@ -271,14 +270,14 @@ def tilt_check(det_data, dets, tilts, pickle_name, cwd, p_dir, beam_11MeV, print
                 plt.figure(fig_no[d] + 10, figsize=(10,8))
                 if d > 5:
                     if tilt == 0:
-                        shifted_angs = [x + 10 for x in angles[::-1]]
-                        shifted_x = [x + 10 for x in x_vals]
-                        print angles, shifted_angs
+                        shifted_angs = [x for x in angles[::-1]]
+                        shifted_x = [x for x in np.linspace(0, 180, 100)]
+                        y_vals = sin_func(np.deg2rad(shifted_x), pars['a'], pars['b'], pars['phi'])
                         if not beam_11MeV:
-                            shifted_angs = [200 - a for a in shifted_angs][::-1]
+                            shifted_angs = [180 - a for a in shifted_angs][::-1]
                     else:
                         shifted_angs = angles[::-1]
-                        shifted_x = [x + 10 for x in x_vals]
+                        shifted_x = [x for x in x_vals]
                         if not beam_11MeV:
                             shifted_angs = [190 - a for a in shifted_angs][::-1]
                     #shifted_x, y_vals = [list(t) for t in zip(*sorted(zip(shifted_x, y_vals)))]
@@ -306,6 +305,7 @@ def tilt_check(det_data, dets, tilts, pickle_name, cwd, p_dir, beam_11MeV, print
                     plt.ylabel('light output (MeVee)')
                 plt.xlabel('rotation angle (degree)')
                 name = name[0] + '_' + name[1] + '_' + name[2] + '_' + name[4]
+                print np.mean(data)
                 print name
                 plt.title(name)
                 plt.legend(fontsize=10)
@@ -2017,7 +2017,7 @@ def main():
 
     # comparison of ql for recoils along the a-axis
     if compare_a_axes:
-        compare_a_axis_recoils(fin, dets, cwd, p_dir, plot_by_det=False, save_plots=False)
+        compare_a_axis_recoils(fin, dets, cwd, p_dir, plot_by_det=True, save_plots=False)
 
     # plot ratios
     if ratios_plot:

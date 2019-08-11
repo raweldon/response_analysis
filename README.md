@@ -106,5 +106,16 @@
     * added plot_acp_lo_curves function
     * updated compare_a_axis_recoils function to show rel diff between bvert and cpvert a-axis measurements
         * cpvert is systematically lower -- why? 
+
+* 8/11/2019
+    * added smoothing branch
+        * Issue with BR vs BL anisotropy measurements (check_tilt function)
+            * The anisotropy magnitude measured with BR dets is less than BL
+            * There is an angular offset between the BR and BL anistoropy measurements
+                * 10 deg for 0deg tilt, small (~5 deg or less) for other tilts
+                * Only thing that changed between tilts was the detector position
+            * Partially due to BR detectors not being level with the target det (i.e. an offset in phi?)?
+                * BR LO is systematically high for EJ-228 measurements
+                * LO can be higher or lower than that measured in the ac' plane depending on the offset in phi (seems like our offset is negative)
             
           
