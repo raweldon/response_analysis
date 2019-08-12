@@ -278,6 +278,7 @@ def tilt_check(det_data, dets, tilts, pickle_name, cwd, p_dir, beam_11MeV, print
 def smoothing_tilt(dets, pickle_name, cwd, p_dir, print_max_ql, get_a_data, pulse_shape, delayed, prompt, show_plots, save_plots, save_pickle):
     ''' Smoothing assumes BL measurements are more precise than BR (change in anisotropy is greater, BR dets were most likely below the plane of measurement)
             and that the cpvert crystals lower light output at 11 MeV is due to poor calibration
+        
     '''
 
     def fit_tilt_data(data, angles, print_report):
@@ -339,7 +340,8 @@ def smoothing_tilt(dets, pickle_name, cwd, p_dir, print_max_ql, get_a_data, puls
         fig_no = [1, 2, 3, 4, 5, 6, 6, 5, 4, 3, 2, 1]
         a_label = ['a-axis', '', 'a-axis', '', 'a-axis', '', 'a-axis', '', 'a-axis', '', 'a-axis', '', ]
         min_ql_label = ['expected min', '', 'expected min', '', 'expected min', '', 'expected min', '', 'expected min', '', 'expected min', '', ]
-        color = ['r', 'r', 'r', 'r', 'r', 'r', 'b', 'b', 'b', 'b', 'b', 'b']
+        #color = ['r', 'r', 'r', 'r', 'r', 'r', 'b', 'b', 'b', 'b', 'b', 'b']
+        color = ['r', 'b', 'g', 'c', 'm', 'k', 'y']
         a_axis_dir = [20, 30, 40, 50, 60, 70, 110, 120, 130, 140, 150, 160] # angle for recoils along a-axis (relative)
         cp_b_axes_dir = [x + 90 for x in a_axis_dir[:6]] + [x - 90 for x in a_axis_dir[6:]] # angles for recoils along c' or b axes (only for tilt=0)
 
@@ -347,7 +349,7 @@ def smoothing_tilt(dets, pickle_name, cwd, p_dir, print_max_ql, get_a_data, puls
         sin_params, a_axis_data, cp_b_axes_data = [], [], []
         sin_params.append(['tilt', 'det', 'a', 'b', 'phi'])
         a_axis_data.append(['crystal', 'energy', 'det', 'tilt', 'ql', 'abs_uncert', 'fit_ql', 'counts'])
-        for tilt in tilts:
+        for tidx, tilt in enumerate(tilts):
             tilt_df = det_data.loc[(det_data.tilt == str(tilt))]
 
             if show_plots:
@@ -416,40 +418,40 @@ def smoothing_tilt(dets, pickle_name, cwd, p_dir, print_max_ql, get_a_data, puls
                                         y_vals.min(), counts.iloc[np.where(angles == cp_b_axes_dir[d])].values[0]])
 
                 # plot same det angles together
-                if show_plots:
+                #if show_plots:
                     
-                    plt.figure(fig_no[d], figsize=(10,8))
-                    plt.errorbar(angles, data, yerr=data_uncert.values, ecolor='black', markerfacecolor=color[d], fmt='o', 
-                                markeredgecolor='k', markeredgewidth=1, markersize=10, capsize=1, label='det ' + str(det))
-                    
-                    # annotate
-                    for rot, ang, t in zip(det_df.rotation, angles, data):
-                        plt.annotate( str(rot) + '$^{\circ}$', xy=(ang, t), xytext=(-3, 10), textcoords='offset points')
-                
-                    # plot fit
-                    plt.plot(x_vals, y_vals, '--', color=color[d])
-                    
-                    # check a-axis recoils have max ql - 11 and 4 MeV look good
-                    plt.scatter(angles[np.where(angles == a_axis_dir[d])], data.iloc[np.where(angles == a_axis_dir[d])], c='k', s=120, zorder=10, label=a_label[d])
-                    plt.scatter(angles[np.where(angles == cp_b_axes_dir[d])], data.iloc[np.where(angles == cp_b_axes_dir[d])], c='g', s=120, zorder=10, label=min_ql_label[d])
-                                                
-                    plt.xlim(-5, max(angles)+5)
-                    if pulse_shape:
-                        plt.ylabel('pulse shape parameter')
-                    else:
-                        plt.ylabel('light output (MeVee)')
-                    plt.xlabel('rotation angle (degree)')
-                    name = name[0] + '_' + name[1] + '_' + name[2] + '_' + name[4]
-                    print name
-                    plt.title(name)
-                    plt.legend(fontsize=10)
-                    if save_plots:
-                        if d > 5:
-                            if pulse_shape:
-                                plt.savefig(cwd + '/figures/tilt_plots/pulse_shape/' + name + '_pulse_shape.png')
-                            else:
-                                plt.savefig(cwd + '/figures/tilt_plots/' + name + '.png')
-                                print 'plots saved to /figures/tilt_plots/' + name + '.png'
+                    #plt.figure(fig_no[d], figsize=(10,8))
+                    #plt.errorbar(angles, data, yerr=data_uncert.values, ecolor='black', markerfacecolor=color[d], fmt='o', 
+                    #            markeredgecolor='k', markeredgewidth=1, markersize=10, capsize=1, label='det ' + str(det))
+                    #
+                    ## annotate
+                    #for rot, ang, t in zip(det_df.rotation, angles, data):
+                    #    plt.annotate( str(rot) + '$^{\circ}$', xy=(ang, t), xytext=(-3, 10), textcoords='offset points')
+                #
+                    ## plot fit
+                    #plt.plot(x_vals, y_vals, '--', color=color[d])
+                    #
+                    ## check a-axis recoils have max ql - 11 and 4 MeV look good
+                    #plt.scatter(angles[np.where(angles == a_axis_dir[d])], data.iloc[np.where(angles == a_axis_dir[d])], c='k', s=120, zorder=10, label=a_label[d])
+                    #plt.scatter(angles[np.where(angles == cp_b_axes_dir[d])], data.iloc[np.where(angles == cp_b_axes_dir[d])], c='g', s=120, zorder=10, label=min_ql_label[d])
+                    #                            
+                    #plt.xlim(-5, max(angles)+5)
+                    #if pulse_shape:
+                    #    plt.ylabel('pulse shape parameter')
+                    #else:
+                    #    plt.ylabel('light output (MeVee)')
+                    #plt.xlabel('rotation angle (degree)')
+                    #name = name[0] + '_' + name[1] + '_' + name[2] + '_' + name[4]
+                    #print name
+                    #plt.title(name)
+                    #plt.legend(fontsize=10)
+                    #if save_plots:
+                    #    if d > 5:
+                    #        if pulse_shape:
+                    #            plt.savefig(cwd + '/figures/tilt_plots/pulse_shape/' + name + '_pulse_shape.png')
+                    #        else:
+                    #            plt.savefig(cwd + '/figures/tilt_plots/' + name + '.png')
+                    #            print 'plots saved to /figures/tilt_plots/' + name + '.png'
                 
                 #
                 # testing smoothing and averaging 
@@ -478,28 +480,22 @@ def smoothing_tilt(dets, pickle_name, cwd, p_dir, print_max_ql, get_a_data, puls
                     y_vals = sin_func(x_vals_rad, pars['a'], pars['b'], pars['phi'])
                     sin_params.append([tilt, det, pars['a'], pars['b'], pars['phi']])
 
-                    if show_plots:
-                        plt.errorbar(shifted_angs, data, yerr=data_uncert.values, ecolor='black', markerfacecolor=color[d], fmt='o', 
-                                    markeredgecolor='k', markeredgewidth=1, markersize=10, capsize=1, label='det ' + str(det))
-                        plt.plot(x_vals, y_vals, '--', color=color[d])
+                    #if show_plots:
+                    #    plt.errorbar(shifted_angs, data, yerr=data_uncert.values, ecolor='black', markerfacecolor=color[d], fmt='o', 
+                    #                markeredgecolor='k', markeredgewidth=1, markersize=10, capsize=1, label='det ' + str(det))
+                    #    plt.plot(x_vals, y_vals, '--', color=color[d])
 
                 else:
                     # use to get scaling factor for smoothing
-                    #if tilt == 0 and 'bvert' in f:
-                    #    max_ql.append(max(data))
-                    #    print max_ql
-                    #else:
-                    #    if max(data) > max_ql[d]:
-                    #        max_ql[d] = max(data)
-                    #        print max_ql
-                    if beam_11MeV:
-                        max_ql = [5.4341, 4.3278, 3.1079, 1.9067, 0.9435, 0.3198] # calulcated above (copy from output)
-                    else:
-                        max_ql = [1.6429, 1.3229, 0.9213, 0.5553, 0.2743, 0.1045]
 
-                    c = max(data)/max_ql[d]
-                    data = data/c
-                    print max_ql[d], max(data), data.iloc[np.where(angles == a_axis_dir[d])].values
+                    #if beam_11MeV:
+                    #    max_ql = [5.4341, 4.3278, 3.1079, 1.9067, 0.9435, 0.3198] # calulcated above (copy from output)
+                    #else:
+                    #    max_ql = [1.6429, 1.3229, 0.9213, 0.5553, 0.2743, 0.1045]
+#
+                    #c = max(data)/max_ql[d]
+                    #data = data/c
+                    #print max_ql[d], max(data), data.iloc[np.where(angles == a_axis_dir[d])].values
 
                     # fit
                     res = fit_tilt_data(data.values, angles, print_report=False)
@@ -507,15 +503,36 @@ def smoothing_tilt(dets, pickle_name, cwd, p_dir, print_max_ql, get_a_data, puls
                     x_vals = np.linspace(0, 190, 100)
                     x_vals_rad = np.deg2rad(x_vals)
                     y_vals = sin_func(x_vals_rad, pars['a'], pars['b'], pars['phi'])
+
+                    #if tilt == 0 and 'bvert' in f:
+                    #    max_ql.append(max(y_vals))
+                    #    print max_ql
+                    #else:
+                    #    if max(y_vals) > max_ql[d]:
+                    #        max_ql[d] = max(data)
+                    #        print max_ql
+
+                    if beam_11MeV:
+                        max_ql = [5.361060691111871, 4.321438060046981, 3.087094177473607, 1.902, 0.9435, 0.3169] # calulcated above (copy from output)
+                    else:
+                        max_ql = [1.6429, 1.3094, 0.9084, 0.5553, 0.2733, 0.1042]
+
+                    c = max(y_vals)/max_ql[d]
+                    data = data/c
+                    y_vals = y_vals/c
+                    res = fit_tilt_data(data.values, angles, print_report=False)
+                    pars = res.best_values
+                    print max_ql[d], max(y_vals), data.iloc[np.where(angles == a_axis_dir[d])].values
                     sin_params.append([tilt, det, pars['a'], pars['b'], pars['phi']])
 
                     if show_plots:
-                        plt.errorbar(angles, data, yerr=data_uncert.values, ecolor='black', markerfacecolor=color[d], fmt='o', 
-                                    markeredgecolor='k', markeredgewidth=1, markersize=10, capsize=1, label='det ' + str(det))
-                        plt.plot(x_vals, y_vals, '--', color=color[d])
+                        plt.errorbar(angles, data, yerr=data_uncert.values, ecolor='black', markerfacecolor=color[tidx], fmt='o', 
+                                    markeredgecolor='k', markeredgewidth=1, markersize=10, capsize=1, label=str(tilt) + ' deg tilt')
+                        plt.plot(x_vals, y_vals, '--', color=color[tidx])
                         # annotate
                         for rot, ang, t in zip(det_df.rotation, angles, data):
                             plt.annotate( str(rot) + '$^{\circ}$', xy=(ang, t), xytext=(-3, 10), textcoords='offset points')
+
                                             
                         plt.xlim(-5, 200)
                         if pulse_shape:
@@ -528,8 +545,8 @@ def smoothing_tilt(dets, pickle_name, cwd, p_dir, print_max_ql, get_a_data, puls
                         plt.title(name)
                         plt.legend(fontsize=10)
                     
-            if show_plots:
-                plt.show()
+        if show_plots:
+            plt.show()
 
         #print max_ql
         # save sinusoid fit to pickle
@@ -1037,8 +1054,8 @@ def plot_smoothed_fitted_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_u
             tri_smooth = mlab.pipeline.poly_data_normals(tri) # smooths delaunay triangulation mesh
             surf = mlab.pipeline.surface(tri_smooth, colormap='viridis')
             
-            for x_val, y_val, z_val, ql_val in zip(x, y, z, ql):
-                mlab.text3d(x_val, y_val, z_val-0.1, str(round(ql_val,2)), scale=0.03, color=(0,0,0), figure=fig)
+            #for x_val, y_val, z_val, ql_val in zip(x, y, z, ql):
+            #    mlab.text3d(x_val, y_val, z_val-0.1, str(round(ql_val,2)), scale=0.03, color=(0,0,0), figure=fig)
 
             mlab.axes(pts, xlabel='a', ylabel='b', zlabel='c\'')
             mlab.colorbar(surf, orientation='vertical') 
@@ -2391,7 +2408,7 @@ def main():
 
     if smooth_tilt:
         smoothing_tilt(dets, fin, cwd, p_dir, print_max_ql=False, get_a_data=True, pulse_shape=False, 
-                    delayed=False, prompt=False, show_plots=True, save_plots=False, save_pickle=True)
+                    delayed=False, prompt=False, show_plots=False, save_plots=False, save_pickle=True)
 
     # comparison of ql for recoils along the a-axis
     if compare_a_axes:
@@ -2481,7 +2498,7 @@ if __name__ == '__main__':
     # check lo for a specific tilt (sinusoids)
     check_tilt = False
 
-    smooth_tilt = True
+    smooth_tilt = False
 
     # compare a_axis recoils (all tilts measure ql along a-axis)
     compare_a_axes = False

@@ -117,5 +117,9 @@
             * Partially due to BR detectors not being level with the target det (i.e. an offset in phi?)?
                 * BR LO is systematically high for EJ-228 measurements
                 * LO can be higher or lower than that measured in the ac' plane depending on the offset in phi (seems like our offset is negative)
-            
+                
+* 8/12/2019
+    * created new functions smoothing_tilt and plot_smoothed_fitted_heatmaps for smoothed data
+    * abandoned BR data - anisotropy is systematically lower than BL data - backing dets must have been off zero degree plane          
+
           
