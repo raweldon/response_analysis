@@ -126,12 +126,6 @@ def tilt_check(det_data, dets, tilts, pickle_name, cwd, p_dir, beam_11MeV, print
                 idxmax = tilt_df.ql_mean.idxmax()
                 max_col = tilt_df.iloc[idxmax]
                 print '{:^5} {:>8}'.format(max_col.tilt, max_col.ql_mean)
-    
-    def get_avg_data_to_smooth(angles, pars, d):
-        lo = sin_func(np.deg2rad(angles), pars['a'], pars['b'], pars['phi'])
-        for a, l in zip(angles, lo):
-            print a, l
-
 
     if print_max_ql:
         get_max_ql_per_det(det_data, dets, tilts)
@@ -181,10 +175,12 @@ def tilt_check(det_data, dets, tilts, pickle_name, cwd, p_dir, beam_11MeV, print
 
                 data = det_df.ps
                 data_uncert = det_df.ps_uncert
+                counts = det_df.counts
 
             elif delayed:
                 data = det_df.qs_mean
                 data_uncert = det_df.qs_abs_uncert
+                counts = det_df.counts
             
             elif prompt:
                 ql = det_df.ql_mean.values
@@ -199,6 +195,7 @@ def tilt_check(det_data, dets, tilts, pickle_name, cwd, p_dir, beam_11MeV, print
 
                 data = det_df.qp
                 data_uncert = det_df.qp_uncert
+                counts = det_df.counts
 
             else:
                 data = det_df.ql_mean
@@ -218,15 +215,13 @@ def tilt_check(det_data, dets, tilts, pickle_name, cwd, p_dir, beam_11MeV, print
             # get lo along a, b, c' axes
             if a_axis_dir[d] in angles:
                 a_axis_ql = data.iloc[np.where(angles == a_axis_dir[d])].values[0]
+                #a_axis_ql = max(data.values)
                 a_axis_data.append([name[0], name[1], name[4], tilt, a_axis_ql, data_uncert.iloc[np.where(angles == a_axis_dir[d])].values[0], 
                                    y_vals.max(), counts.iloc[np.where(angles == a_axis_dir[d])].values[0]])
             if cp_b_axes_dir[d] in angles:
                 cp_b_ql = data.iloc[np.where(angles == cp_b_axes_dir[d])].values[0]
                 cp_b_axes_data.append([name[0], name[1], name[4], tilt, cp_b_ql, data_uncert.iloc[np.where(angles == cp_b_axes_dir[d])].values[0], 
                                        y_vals.min(), counts.iloc[np.where(angles == cp_b_axes_dir[d])].values[0]])
-
-            # collect measurements with same light output (pulse shape) for smoothing
-            #get_avg_data_to_smooth(angles, pars, d)
 
             # plot same det angles together
             if show_plots:
@@ -264,52 +259,6 @@ def tilt_check(det_data, dets, tilts, pickle_name, cwd, p_dir, beam_11MeV, print
                             plt.savefig(cwd + '/figures/tilt_plots/' + name + '.png')
                             print 'plots saved to /figures/tilt_plots/' + name + '.png'
 
-                #
-                # testing smoothing and averaging 
-                #
-                plt.figure(fig_no[d] + 10, figsize=(10,8))
-                if d > 5:
-                    if tilt == 0:
-                        shifted_angs = [x for x in angles[::-1]]
-                        shifted_x = [x for x in np.linspace(0, 180, 100)]
-                        y_vals = sin_func(np.deg2rad(shifted_x), pars['a'], pars['b'], pars['phi'])
-                        if not beam_11MeV:
-                            shifted_angs = [180 - a for a in shifted_angs][::-1]
-                    else:
-                        shifted_angs = angles[::-1]
-                        shifted_x = [x for x in x_vals]
-                        if not beam_11MeV:
-                            shifted_angs = [190 - a for a in shifted_angs][::-1]
-                    #shifted_x, y_vals = [list(t) for t in zip(*sorted(zip(shifted_x, y_vals)))]
-
-                    plt.errorbar(shifted_angs, data, yerr=data_uncert.values, ecolor='black', markerfacecolor=color[d], fmt='o', 
-                                markeredgecolor='k', markeredgewidth=1, markersize=10, capsize=1, label='det ' + str(det))
-                    plt.plot(shifted_x[::-1], y_vals, '--', color=color[d])
-
-                else:
-                    plt.errorbar(angles, data, yerr=data_uncert.values, ecolor='black', markerfacecolor=color[d], fmt='o', 
-                                markeredgecolor='k', markeredgewidth=1, markersize=10, capsize=1, label='det ' + str(det))
-                    plt.plot(x_vals, y_vals, '--', color=color[d])
-                    # annotate
-                    for rot, ang, t in zip(det_df.rotation, angles, data):
-                        plt.annotate( str(rot) + '$^{\circ}$', xy=(ang, t), xytext=(-3, 10), textcoords='offset points')
-
-                # check a-axis recoils have max ql - 11 and 4 MeV look good
-                #plt.scatter(angles[np.where(angles == a_axis_dir[d])], data.iloc[np.where(angles == a_axis_dir[d])], c='k', s=120, zorder=10, label=a_label[d])
-                #plt.scatter(angles[np.where(angles == cp_b_axes_dir[d])], data.iloc[np.where(angles == cp_b_axes_dir[d])], c='g', s=120, zorder=10, label=min_ql_label[d])
-                                            
-                plt.xlim(-5, 200)
-                if pulse_shape:
-                    plt.ylabel('pulse shape parameter')
-                else:
-                    plt.ylabel('light output (MeVee)')
-                plt.xlabel('rotation angle (degree)')
-                name = name[0] + '_' + name[1] + '_' + name[2] + '_' + name[4]
-                print np.mean(data)
-                print name
-                plt.title(name)
-                plt.legend(fontsize=10)
-                
         if show_plots:
             plt.show()
 
@@ -325,6 +274,271 @@ def tilt_check(det_data, dets, tilts, pickle_name, cwd, p_dir, beam_11MeV, print
         headers = a_axis_data.pop(0)
         #pickle.dump( a_axis_data, open( p_dir + 'a_axis_data.p', 'wb'))
         return pd.DataFrame(a_axis_data, columns=headers), pd.DataFrame(cp_b_axes_data, columns=headers)
+
+def smoothing_tilt(dets, pickle_name, cwd, p_dir, print_max_ql, get_a_data, pulse_shape, delayed, prompt, show_plots, save_plots, save_pickle):
+    ''' Smoothing assumes BL measurements are more precise than BR (change in anisotropy is greater, BR dets were most likely below the plane of measurement)
+            and that the cpvert crystals lower light output at 11 MeV is due to poor calibration
+    '''
+
+    def fit_tilt_data(data, angles, print_report):
+            # sinusoid fit with lmfit
+            angles = [np.deg2rad(x) for x in angles]
+            gmodel = lmfit.Model(sin_func)
+            params = gmodel.make_params(a=1, b=1, phi=0.1)
+            params['phi'].max = np.deg2rad(90)
+            params['phi'].min = np.deg2rad(-90)
+            res = gmodel.fit(data, params=params, x=angles, nan_policy='omit')#, method='nelder')
+            if print_report:
+                print '\n', lmfit.fit_report(res)
+            return res
+
+    def get_max_ql_per_det(det_data, dets, tilts):
+        # use to check max_ql values for each tilt per detector (all tilts measure recoils along the a-axis)
+        for det in dets:
+            print '\n-----------\ndet_no ', det, '\n-----------\n'
+            print 'tilt      ql'
+            det_df = det_data.loc[(det_data.det_no == str(det))]
+            for tilt in tilts:
+                tilt_df = det_df.loc[(det_df.tilt == str(tilt))]
+                tilt_df = tilt_df.reset_index()
+                idxmax = tilt_df.ql_mean.idxmax()
+                max_col = tilt_df.iloc[idxmax]
+                print '{:^5} {:>8}'.format(max_col.tilt, max_col.ql_mean)
+
+    for f in pickle_name:
+        if '11' in f:
+            beam_11MeV = True
+        else:
+            beam_11MeV = False
+        if 'bvert' in f:
+            max_ql = []
+            tilts = [0, 45, -45, 30, -30, 15, -15]
+        else:
+            tilts = [0, 30, -30, 15, -15]
+
+        data = pd_load(f, p_dir)
+        det_data = split_filenames(data)
+ 
+        if print_max_ql:
+            get_max_ql_per_det(det_data, dets, tilts)
+
+        if pulse_shape:
+            print '\nANALYZING PULSE SHAPE DATA'
+            # pulse shape uncertainties, from daq2:/home/radians/raweldon/tunl.2018.1_analysis/peak_localization/pulse_shape_get_hotspots.py
+            if beam_11MeV:
+                ps_unc = (0.0017, 0.0014, 0.0013, 0.0012, 0.0013, 0.0019, 0.0019, 0.0013, 0.0012, 0.0012, 0.0013, 0.0018)
+            else:
+                ps_unc = (0.0015, 0.0015, 0.0015, 0.0015,  0.002, 0.0036, 0.0036, 0.0021, 0.0016, 0.0015, 0.0015, 0.0015)
+        elif delayed:
+            print '\nANALYZING QS'
+        elif prompt:
+            print '\nANALYZING QP'
+        else:
+            print '\nANALYZING QL'
+
+        fig_no = [1, 2, 3, 4, 5, 6, 6, 5, 4, 3, 2, 1]
+        a_label = ['a-axis', '', 'a-axis', '', 'a-axis', '', 'a-axis', '', 'a-axis', '', 'a-axis', '', ]
+        min_ql_label = ['expected min', '', 'expected min', '', 'expected min', '', 'expected min', '', 'expected min', '', 'expected min', '', ]
+        color = ['r', 'r', 'r', 'r', 'r', 'r', 'b', 'b', 'b', 'b', 'b', 'b']
+        a_axis_dir = [20, 30, 40, 50, 60, 70, 110, 120, 130, 140, 150, 160] # angle for recoils along a-axis (relative)
+        cp_b_axes_dir = [x + 90 for x in a_axis_dir[:6]] + [x - 90 for x in a_axis_dir[6:]] # angles for recoils along c' or b axes (only for tilt=0)
+
+        
+        sin_params, a_axis_data, cp_b_axes_data = [], [], []
+        sin_params.append(['tilt', 'det', 'a', 'b', 'phi'])
+        a_axis_data.append(['crystal', 'energy', 'det', 'tilt', 'ql', 'abs_uncert', 'fit_ql', 'counts'])
+        for tilt in tilts:
+            tilt_df = det_data.loc[(det_data.tilt == str(tilt))]
+
+            if show_plots:
+                print ''
+
+            for d, det in enumerate(dets):
+                det_df = tilt_df[(tilt_df.det_no == str(det))]
+                det_df, angles = order_by_rot(det_df, beam_11MeV)
+
+                if pulse_shape:
+                    # add pulse shape values and uncert to dataframe
+                    ql = det_df.ql_mean.values
+                    qs = det_df.qs_mean.values
+                    ps = 1 - qs/ql
+                    ps_uncert = [ps_unc[d]]*len(ql) # from daq2:/home/radians/raweldon/tunl.2018.1_analysis/peak_localization/pulse_shape_get_hotspots.py
+                    det_df = det_df.assign(ps = ps)
+                    det_df = det_df.assign(ps_uncert = ps_uncert)
+
+                    data = det_df.ps
+                    data_uncert = det_df.ps_uncert
+                    counts = det_df.counts
+
+                elif delayed:
+                    data = det_df.qs_mean
+                    data_uncert = det_df.qs_abs_uncert
+                    counts = det_df.counts
+                
+                elif prompt:
+                    ql = det_df.ql_mean.values
+                    qs = det_df.qs_mean.values
+                    q_prompt = ql - qs
+                    det_df = det_df.assign(qp = q_prompt)            
+
+                    ql_uncert = det_df.ql_abs_uncert.values
+                    qs_uncert = det_df.qs_abs_uncert.values
+                    qp_uncert = np.sqrt(ql_uncert**2 + qs_uncert**2)  
+                    det_df = det_df.assign(qp_uncert = qp_uncert)
+
+                    data = det_df.qp
+                    data_uncert = det_df.qp_uncert
+                    counts = det_df.counts
+
+                else:
+                    data = det_df.ql_mean
+                    data_uncert = det_df.ql_abs_uncert
+                    counts = det_df.counts
+
+                # fit
+                res = fit_tilt_data(data.values, angles, print_report=False)
+                pars = res.best_values
+                x_vals = np.linspace(0, 190, 100)
+                x_vals_rad = np.deg2rad(x_vals)
+                y_vals = sin_func(x_vals_rad, pars['a'], pars['b'], pars['phi'])
+                #sin_params.append([tilt, det, pars['a'], pars['b'], pars['phi']])
+
+                name = re.split('\.|_', det_df.filename.iloc[0])  
+                # get lo along a, b, c' axes
+                if a_axis_dir[d] in angles:
+                    a_axis_ql = data.iloc[np.where(angles == a_axis_dir[d])].values[0]
+                    #a_axis_ql = max(data.values)
+                    a_axis_data.append([name[0], name[1], name[4], tilt, a_axis_ql, data_uncert.iloc[np.where(angles == a_axis_dir[d])].values[0], 
+                                    y_vals.max(), counts.iloc[np.where(angles == a_axis_dir[d])].values[0]])
+                if cp_b_axes_dir[d] in angles:
+                    cp_b_ql = data.iloc[np.where(angles == cp_b_axes_dir[d])].values[0]
+                    cp_b_axes_data.append([name[0], name[1], name[4], tilt, cp_b_ql, data_uncert.iloc[np.where(angles == cp_b_axes_dir[d])].values[0], 
+                                        y_vals.min(), counts.iloc[np.where(angles == cp_b_axes_dir[d])].values[0]])
+
+                # plot same det angles together
+                if show_plots:
+                    
+                    plt.figure(fig_no[d], figsize=(10,8))
+                    plt.errorbar(angles, data, yerr=data_uncert.values, ecolor='black', markerfacecolor=color[d], fmt='o', 
+                                markeredgecolor='k', markeredgewidth=1, markersize=10, capsize=1, label='det ' + str(det))
+                    
+                    # annotate
+                    for rot, ang, t in zip(det_df.rotation, angles, data):
+                        plt.annotate( str(rot) + '$^{\circ}$', xy=(ang, t), xytext=(-3, 10), textcoords='offset points')
+                
+                    # plot fit
+                    plt.plot(x_vals, y_vals, '--', color=color[d])
+                    
+                    # check a-axis recoils have max ql - 11 and 4 MeV look good
+                    plt.scatter(angles[np.where(angles == a_axis_dir[d])], data.iloc[np.where(angles == a_axis_dir[d])], c='k', s=120, zorder=10, label=a_label[d])
+                    plt.scatter(angles[np.where(angles == cp_b_axes_dir[d])], data.iloc[np.where(angles == cp_b_axes_dir[d])], c='g', s=120, zorder=10, label=min_ql_label[d])
+                                                
+                    plt.xlim(-5, max(angles)+5)
+                    if pulse_shape:
+                        plt.ylabel('pulse shape parameter')
+                    else:
+                        plt.ylabel('light output (MeVee)')
+                    plt.xlabel('rotation angle (degree)')
+                    name = name[0] + '_' + name[1] + '_' + name[2] + '_' + name[4]
+                    print name
+                    plt.title(name)
+                    plt.legend(fontsize=10)
+                    if save_plots:
+                        if d > 5:
+                            if pulse_shape:
+                                plt.savefig(cwd + '/figures/tilt_plots/pulse_shape/' + name + '_pulse_shape.png')
+                            else:
+                                plt.savefig(cwd + '/figures/tilt_plots/' + name + '.png')
+                                print 'plots saved to /figures/tilt_plots/' + name + '.png'
+                
+                #
+                # testing smoothing and averaging 
+                #
+                plt.figure(fig_no[d] + 10, figsize=(10,8))
+                if d > 5:
+                    #if tilt == 0:
+                    #    shifted_angs = [x for x in angles[::-1]]
+                    #    shifted_x = [x for x in np.linspace(0, 180, 100)]
+                    #    y_vals = sin_func(np.deg2rad(shifted_x), pars['a'], pars['b'], pars['phi'])
+                    #    if not beam_11MeV:
+                    #        shifted_angs = [180 - a for a in shifted_angs][::-1]
+                    #else:
+                    #    shifted_angs = angles[::-1]
+                    #    shifted_x = [x for x in x_vals]
+                    #    if not beam_11MeV:
+                    #        shifted_angs = [190 - a for a in shifted_angs][::-1]
+                    #shifted_x, y_vals = [list(t) for t in zip(*sorted(zip(shifted_x, y_vals)))]
+                                    # fit
+                    data = data[::-1]
+                    shifted_angs = angles
+                    res = fit_tilt_data(data.values, angles, print_report=False)
+                    pars = res.best_values
+                    x_vals = np.linspace(0, 190, 100)
+                    x_vals_rad = np.deg2rad(x_vals)
+                    y_vals = sin_func(x_vals_rad, pars['a'], pars['b'], pars['phi'])
+                    sin_params.append([tilt, det, pars['a'], pars['b'], pars['phi']])
+
+                    if show_plots:
+                        plt.errorbar(shifted_angs, data, yerr=data_uncert.values, ecolor='black', markerfacecolor=color[d], fmt='o', 
+                                    markeredgecolor='k', markeredgewidth=1, markersize=10, capsize=1, label='det ' + str(det))
+                        plt.plot(x_vals, y_vals, '--', color=color[d])
+
+                else:
+                    # use to get scaling factor for smoothing
+                    #if tilt == 0 and 'bvert' in f:
+                    #    max_ql.append(max(data))
+                    #    print max_ql
+                    #else:
+                    #    if max(data) > max_ql[d]:
+                    #        max_ql[d] = max(data)
+                    #        print max_ql
+                    if beam_11MeV:
+                        max_ql = [5.4341, 4.3278, 3.1079, 1.9067, 0.9435, 0.3198] # calulcated above (copy from output)
+                    else:
+                        max_ql = [1.6429, 1.3229, 0.9213, 0.5553, 0.2743, 0.1045]
+
+                    c = max(data)/max_ql[d]
+                    data = data/c
+                    print max_ql[d], max(data), data.iloc[np.where(angles == a_axis_dir[d])].values
+
+                    # fit
+                    res = fit_tilt_data(data.values, angles, print_report=False)
+                    pars = res.best_values
+                    x_vals = np.linspace(0, 190, 100)
+                    x_vals_rad = np.deg2rad(x_vals)
+                    y_vals = sin_func(x_vals_rad, pars['a'], pars['b'], pars['phi'])
+                    sin_params.append([tilt, det, pars['a'], pars['b'], pars['phi']])
+
+                    if show_plots:
+                        plt.errorbar(angles, data, yerr=data_uncert.values, ecolor='black', markerfacecolor=color[d], fmt='o', 
+                                    markeredgecolor='k', markeredgewidth=1, markersize=10, capsize=1, label='det ' + str(det))
+                        plt.plot(x_vals, y_vals, '--', color=color[d])
+                        # annotate
+                        for rot, ang, t in zip(det_df.rotation, angles, data):
+                            plt.annotate( str(rot) + '$^{\circ}$', xy=(ang, t), xytext=(-3, 10), textcoords='offset points')
+                                            
+                        plt.xlim(-5, 200)
+                        if pulse_shape:
+                            plt.ylabel('pulse shape parameter')
+                        else:
+                            plt.ylabel('light output (MeVee)')
+                        plt.xlabel('rotation angle (degree)')
+                        name = name[0] + '_' + name[1] + '_' + name[2] + '_' + name[4]
+                        print name
+                        plt.title(name)
+                        plt.legend(fontsize=10)
+                    
+            if show_plots:
+                plt.show()
+
+        #print max_ql
+        # save sinusoid fit to pickle
+        if save_pickle:
+            name = f.split('.')[0]
+            out = open( p_dir + name + '_sin_params_smoothed.p', "wb" )
+            pickle.dump( sin_params, out)
+            out.close()
+            print 'pickle saved to ' + p_dir + name + '_sin_params_smoothed.p'
 
 def polar_to_cartesian(theta, phi, crystal_orientation, cp_up):
     # cp_up
@@ -670,6 +884,166 @@ def plot_fitted_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up,
             mlab.colorbar(surf, orientation='vertical') 
             mlab.view(azimuth=0, elevation=-90, distance=7.5, figure=fig)            
             mlab.show()        
+
+def plot_avg_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV, plot_pulse_shape, multiplot, save_multiplot, show_delaunay):
+    ''' Plots the heatmap for a hemishpere of measurements
+        Full sphere is made by plotting a mirror image of the hemiphere measurements
+    '''
+    data_bvert = pd_load(fin1, p_dir)
+    data_bvert = split_filenames(data_bvert)
+    data_cpvert = pd_load(fin2, p_dir)
+    data_cpvert = split_filenames(data_cpvert)
+
+    bl_br_vals = []
+    order = [11, 10, 9, 8, 7, 6]
+
+    for d, det in enumerate(dets):       
+        df_b_mapped = map_data_3d(data_bvert, det, bvert_tilt, b_up, theta_n[d], phi_n[d], beam_11MeV) 
+        df_b_mapped_mirror = map_data_3d(data_bvert, det, bvert_tilt, np.asarray(((1,0,0), (0,1,0), (0,0,-1))), theta_n[d], phi_n[d], beam_11MeV)
+        df_cp_mapped = map_data_3d(data_cpvert, det, cpvert_tilt, cp_up, theta_n[d], phi_n[d], beam_11MeV)
+        df_cp_mapped_mirror = map_data_3d(data_cpvert, det, cpvert_tilt, np.asarray(((-1,0,0), (0,0,-1), (0,1,0))), theta_n[d], phi_n[d], beam_11MeV)
+
+        # convert to cartesian
+        theta_b = np.concatenate([df_b_mapped.theta.values, df_b_mapped_mirror.theta.values])
+        theta_cp = np.concatenate([df_cp_mapped.theta.values, df_cp_mapped_mirror.theta.values])
+        phi_b = np.concatenate([df_b_mapped.phi.values, df_b_mapped_mirror.phi.values])
+        phi_cp = np.concatenate([df_cp_mapped.phi.values, df_cp_mapped_mirror.phi.values])
+
+        x_b, y_b, z_b = polar_to_cartesian(theta_b, phi_b, b_up, cp_up)
+        x_cp, y_cp, z_cp = polar_to_cartesian(theta_cp, phi_cp, cp_up, cp_up)
+
+        x = np.round(np.concatenate((x_b, x_cp)), 12)
+        y = np.round(np.concatenate((y_b, y_cp)), 12)
+        z = np.round(np.concatenate((z_b, z_cp)), 12)
+        ql = np.concatenate([df_b_mapped.ql_mean.values, df_b_mapped_mirror.ql_mean.values, df_cp_mapped.ql_mean.values, df_cp_mapped_mirror.ql_mean.values])
+        tilts = np.concatenate([df_b_mapped.tilt.values, df_b_mapped_mirror.tilt.values, df_cp_mapped.tilt.values, df_cp_mapped_mirror.tilt.values])
+        # remove repeated points
+        xyz = np.array(zip(x, y, z))
+        xyz_u, indices = np.unique(xyz, axis=0, return_index=True)
+        ql = ql[indices]
+        tilts = tilts[indices]
+        x, y, z = xyz_u.T
+
+        if plot_pulse_shape:
+            qs = np.concatenate([df_b_mapped.qs_mean.values, df_b_mapped_mirror.qs_mean.values, df_cp_mapped.qs_mean.values, df_cp_mapped_mirror.qs_mean.values])
+            qs = qs[indices]
+            ps = [1 - a/b for a, b in zip(qs, ql)]
+            vals = zip(*sorted(zip(ql, ps, x, y, z, tilts)))
+        else:
+            vals = zip(*sorted(zip(ql, x, y, z, tilts)))
+
+        bl_br_vals.append(vals)
+
+    if plot_pulse_shape:
+        df = pd.DataFrame(bl_br_vals, columns=['ql', 'ps', 'x', 'y', 'z', 'tilts'])
+    else:
+        df = pd.DataFrame(bl_br_vals, columns=['ql', 'x', 'y', 'z', 'tilts'])
+
+    for i in xrange(0, 6):
+        print '\ndet_no =', i + 4, 'theta_n =', theta_n[i]
+        x = df.x.iloc[i]
+        y = df.y.iloc[i]
+        z = df.z.iloc[i]
+        tilts = np.array(df.tilts.iloc[i])
+        ql = np.array([(q + p)/2 for q, p in zip(df.ql.iloc[i], df.ql.iloc[order[i]])])
+
+        # points3d with delaunay filter - works best!!
+        ## use for nice looking plots
+        if multiplot:
+            heatmap_multiplot(x, y, z, ql, theta_n, d, cwd + '/figures/3d_lo', save_multiplot, beam_11MeV, fitted=False)
+            if plot_pulse_shape:
+                ps = np.array([(q + p)/2 for q, p in zip(df.ps.iloc[i], df.ps.iloc[order[i]])])
+                heatmap_multiplot(x, y, z, ps, theta_n, d, cwd + '/figures/3d_pulse_shape', save_multiplot, beam_11MeV, fitted=False)
+            if not save_multiplot:
+                mlab.show()
+
+        ## use for analysis 
+        else:
+            heatmap_singleplot(x, y, z, ql, tilts, 'ql', show_delaunay)
+            if plot_pulse_shape:
+                ps = np.array([(q + p)/2 for q, p in zip(df.ps.iloc[i], df.ps.iloc[order[i]])])
+                heatmap_singleplot(x, y, z, ps, tilts, 'qs/ql', show_delaunay)
+    mlab.show()
+
+def plot_smoothed_fitted_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV, multiplot, save_multiplot):
+
+    def map_smoothed_fitted_data_3d(data, det, tilts, crystal_orientation, theta_neutron, phi_neutron, beam_11MeV):
+        # like map_data_3d but for fitted data
+        det_df = data.loc[(data.det == det)]
+        ql_all, theta_p, phi_p = [], [], []
+        for t, tilt in enumerate(tilts):
+            
+            tilt_df = det_df.loc[(data.tilt == tilt)]
+            angles = np.arange(0, 180, 5) # 5 and 2 look good
+      
+            ql = sin_func(np.deg2rad(angles), tilt_df['a'].values, tilt_df['b'].values, tilt_df['phi'].values)
+            thetap, phip = map_3d(tilt, crystal_orientation, angles, theta_neutron, phi_neutron)       
+            ql_all.extend(ql)
+            theta_p.extend(thetap)
+            phi_p.extend(phip)
+    
+        d = {'ql': ql_all, 'theta': theta_p, 'phi': phi_p}
+        df = pd.DataFrame(data=d)
+        return df
+
+    data_bvert = pd_load(fin1, p_dir)
+    data_cpvert = pd_load(fin2, p_dir)
+
+    for d, det in enumerate(dets):
+        if d > 5:
+            continue
+        print 'det_no =', det, 'theta_n =', theta_n[d]
+        df_b_mapped = map_smoothed_fitted_data_3d(data_bvert, det, bvert_tilt, b_up, theta_n[d], phi_n[d], beam_11MeV)
+        df_cp_mapped = map_smoothed_fitted_data_3d(data_cpvert, det, cpvert_tilt, cp_up, theta_n[d], phi_n[d], beam_11MeV)
+        df_b_mapped_mirror = map_smoothed_fitted_data_3d(data_bvert, det, bvert_tilt, np.asarray(((1,0,0), (0,1,0), (0,0,-1))), theta_n[d], phi_n[d], beam_11MeV)
+        df_cp_mapped_mirror = map_smoothed_fitted_data_3d(data_cpvert, det, cpvert_tilt, np.asarray(((-1,0,0), (0,0,-1), (0,1,0))), theta_n[d], phi_n[d], beam_11MeV)
+
+        # convert to cartesian
+        theta_b = np.concatenate([df_b_mapped.theta.values, df_b_mapped_mirror.theta.values])
+        theta_cp = np.concatenate([df_cp_mapped.theta.values, df_cp_mapped_mirror.theta.values])
+        phi_b = np.concatenate([df_b_mapped.phi.values, df_b_mapped_mirror.phi.values])
+        phi_cp = np.concatenate([df_cp_mapped.phi.values, df_cp_mapped_mirror.phi.values])
+
+        x_b, y_b, z_b = polar_to_cartesian(theta_b, phi_b, b_up, cp_up)
+        x_cp, y_cp, z_cp = polar_to_cartesian(theta_cp, phi_cp, cp_up, cp_up)
+
+        x = np.round(np.concatenate((x_b, x_cp)), 12)
+        y = np.round(np.concatenate((y_b, y_cp)), 12)
+        z = np.round(np.concatenate((z_b, z_cp)), 12)
+        ql = np.concatenate([df_b_mapped.ql.values, df_b_mapped_mirror.ql.values, df_cp_mapped.ql.values, df_cp_mapped_mirror.ql.values])
+        print max(ql)
+
+        # remove repeated points
+        xyz = np.array(zip(x,y,z))
+        xyz, indices = np.unique(xyz, axis=0, return_index=True)
+        ql = ql[indices]
+        x, y, z = xyz.T
+
+        if multiplot:
+            heatmap_multiplot(x, y, z, ql, theta_n, d, cwd, save_multiplot, beam_11MeV, fitted=True)
+            if save_multiplot:
+                continue
+            mlab.show()
+
+        else:
+            max_idx = np.argmax(ql)
+            print 'ql_max = ', ql[max_idx], '\n'
+            fig = mlab.figure(size=(400*2, 350*2)) 
+            pts = mlab.points3d(x, y, z, ql, colormap='viridis', scale_mode='none', scale_factor=0.03)
+            # plot max ql point (red)
+            mlab.points3d(x[max_idx], y[max_idx], z[max_idx], ql[max_idx], color=(1,0,0), scale_mode='none', scale_factor=0.03)
+            # delaunay triagulation (mesh, interpolation)
+            tri = mlab.pipeline.delaunay3d(pts)
+            tri_smooth = mlab.pipeline.poly_data_normals(tri) # smooths delaunay triangulation mesh
+            surf = mlab.pipeline.surface(tri_smooth, colormap='viridis')
+            
+            for x_val, y_val, z_val, ql_val in zip(x, y, z, ql):
+                mlab.text3d(x_val, y_val, z_val-0.1, str(round(ql_val,2)), scale=0.03, color=(0,0,0), figure=fig)
+
+            mlab.axes(pts, xlabel='a', ylabel='b', zlabel='c\'')
+            mlab.colorbar(surf, orientation='vertical') 
+            mlab.view(azimuth=0, elevation=-90, distance=7.5, figure=fig)            
+            mlab.show()  
 
 def compare_a_axis_recoils(fin, dets, cwd, p_dir, plot_by_det, save_plots):
 
@@ -2012,8 +2386,12 @@ def main():
 
             data = pd_load(f, p_dir)
             data = split_filenames(data)
-            tilt_check(data, dets, tilts, f, cwd, p_dir, beam_11MeV, print_max_ql=False, get_a_data=True, pulse_shape=False, 
-                       delayed=False, prompt=False, show_plots=True, save_plots=False, save_pickle=False)
+            tilt_check(data, dets, tilts, f, cwd, p_dir, beam_11MeV, print_max_ql=False, get_a_data=True, pulse_shape=True, 
+                        delayed=False, prompt=False, show_plots=True, save_plots=False, save_pickle=False)
+
+    if smooth_tilt:
+        smoothing_tilt(dets, fin, cwd, p_dir, print_max_ql=False, get_a_data=True, pulse_shape=False, 
+                    delayed=False, prompt=False, show_plots=True, save_plots=False, save_pickle=True)
 
     # comparison of ql for recoils along the a-axis
     if compare_a_axes:
@@ -2048,7 +2426,7 @@ def main():
     ## heat maps with data points
     if heatmap_11:
         plot_heatmaps(fin[0], fin[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, 
-                      plot_pulse_shape=False, multiplot=False, save_multiplot=False, show_delaunay=False)
+                      plot_pulse_shape=True, multiplot=False, save_multiplot=False, show_delaunay=False)
     if heatmap_4:
         plot_heatmaps(fin[2], fin[3], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=False, 
                       plot_pulse_shape=True, multiplot=False, save_multiplot=False, show_delaunay=False)
@@ -2059,6 +2437,20 @@ def main():
         plot_fitted_heatmaps(sin_fits[0], sin_fits[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, multiplot=False, save_multiplot=False)
     if fitted_heatmap_4:
         plot_fitted_heatmaps(sin_fits[2], sin_fits[3], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=False, multiplot=False, save_multiplot=False)
+
+    ## heat maps with data points
+    if avg_heatmap_11:
+        plot_avg_heatmaps(fin[0], fin[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, 
+                      plot_pulse_shape=True, multiplot=False, save_multiplot=False, show_delaunay=False)
+    if avg_heatmap_4:
+        plot_avg_heatmaps(fin[2], fin[3], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=False, 
+                      plot_pulse_shape=False, multiplot=False, save_multiplot=False, show_delaunay=False)
+
+    sin_fits = ['bvert_11MeV_sin_params_smoothed.p', 'cpvert_11MeV_sin_params_smoothed.p', 'bvert_4MeV_sin_params_smoothed.p', 'cpvert_4MeV_sin_params_smoothed.p']                     
+    if smoothed_fitted_heatmap_11:
+        plot_smoothed_fitted_heatmaps(sin_fits[0], sin_fits[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, multiplot=False, save_multiplot=False)
+    if smoothed_fitted_heatmap_4:
+        plot_smoothed_fitted_heatmaps(sin_fits[2], sin_fits[3], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=False, multiplot=False, save_multiplot=False)
 
     ## polar interpolation
     if polar_plots:
@@ -2087,7 +2479,9 @@ if __name__ == '__main__':
     scatter_4 = False
 
     # check lo for a specific tilt (sinusoids)
-    check_tilt = True
+    check_tilt = False
+
+    smooth_tilt = True
 
     # compare a_axis recoils (all tilts measure ql along a-axis)
     compare_a_axes = False
@@ -2108,6 +2502,13 @@ if __name__ == '__main__':
     # plot heatmaps with fitted data
     fitted_heatmap_11 = False
     fitted_heatmap_4 = False
+
+    # plot heatmaps with data points
+    avg_heatmap_11 = False 
+    avg_heatmap_4 = False
+
+    smoothed_fitted_heatmap_11 = True
+    smoothed_fitted_heatmap_4 = True
 
     # polar plots
     polar_plots = False
