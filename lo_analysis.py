@@ -1128,10 +1128,10 @@ def plot_ratios(fin, dets, cwd, p_dir, pulse_shape, plot_fit_ratio):
     sin_fits = ['bvert_11MeV_sin_params_smoothed.p', 'cpvert_11MeV_sin_params_smoothed.p', 'bvert_4MeV_sin_params_smoothed.p', 'cpvert_4MeV_sin_params_smoothed.p']   
     def get_smoothed_data(f, dets):
         ratio = []
+        data = pd_load(f, p_dir)
         for d, det in enumerate(dets):
             if d > 5:
                 continue
-            data = pd_load(f, p_dir)
             det_df = data.loc[(data.det == det)]
             for t, tilt in enumerate(tilts):
                 if tilt == 0:
@@ -1452,7 +1452,7 @@ def adc_vs_cal_ratios(fin, dets, cwd, p_dir, plot_fit_ratio):
 
     plt.show()
 
-def plot_acp_lo_curves(fin, dets, cwd, p_dir, pulse_shape, plot_fit_data):
+def plot_acp_lo_curves(fin, dets, cwd, p_dir, pulse_shape, br_only, plot_fit_data):
     ''' plot light ouput curves of major axes
         includes function to remove calibration for checking true shape
     '''
@@ -1475,10 +1475,10 @@ def plot_acp_lo_curves(fin, dets, cwd, p_dir, pulse_shape, plot_fit_data):
     sin_fits = ['bvert_11MeV_sin_params_smoothed.p', 'cpvert_11MeV_sin_params_smoothed.p', 'bvert_4MeV_sin_params_smoothed.p', 'cpvert_4MeV_sin_params_smoothed.p']   
     def get_smoothed_data(f, dets):
         ql_max, ql_min = [], []
+        data = pd_load(f, p_dir)
         for d, det in enumerate(dets):
             if d > 5:
                 continue
-            data = pd_load(f, p_dir)
             det_df = data.loc[(data.det == det)]
          
             tilt_df = det_df.loc[(data.tilt == 0)]
@@ -1498,12 +1498,20 @@ def plot_acp_lo_curves(fin, dets, cwd, p_dir, pulse_shape, plot_fit_data):
             beam_11MeV = True
             angles = [70, 60, 50, 40, 30, 20, 20, 30, 40, 50, 60, 70]
             dists = [66.4, 63.8, 63.2, 63.6, 64.9, 65.8, 66.0, 65.3, 63.4, 62.7, 64.3, 66.5]
-            p_erg = 11.325*np.sin(np.deg2rad(angles))**2
+            a_p_erg = 11.325*np.sin(np.deg2rad(angles))**2
+            cp_b_p_erg = a_p_erg
+            if br_only:
+                a_p_erg = a_p_erg[:6]
+                cp_b_p_erg = a_p_erg
         else:
             beam_11MeV = False
-            angles = [60, 40, 20, 30, 50, 70]
-            dists = [63.8, 63.6, 65.8, 65.3, 62.7, 66.5]
-            p_erg = 4.825*np.sin(np.deg2rad(angles))**2
+            a_angles = [70, 60, 50, 40, 30, 20, 30, 50, 70]
+            a_dists = [66.4, 63.8, 63.2, 63.6, 64.9, 65.8, 65.3, 62.7, 66.5]
+            a_p_erg = 4.825*np.sin(np.deg2rad(a_angles))**2
+            cp_b_angles = [60, 40, 20, 20, 30, 40, 50, 60, 70]
+            cp_b_dists = [63.8, 63.6, 65.8, 66.0, 65.3, 63.4, 62.7, 64.3, 66.5]
+            cp_b_p_erg = 4.825*np.sin(np.deg2rad(cp_b_angles))**2                
+
         if 'bvert' in f:
             #tilts = [0, 45, -45, 30, -30, 15, -15]
             tilts = [0]
@@ -1551,53 +1559,64 @@ def plot_acp_lo_curves(fin, dets, cwd, p_dir, pulse_shape, plot_fit_data):
             cp_b_uncert = cp_b_axes_df.abs_uncert.values
             cp_b_fit_ql = cp_b_axes_df.fit_ql.values
             cp_b_ep_err = calc_ep_uncerts(cp_b_axes_df.counts.values, angles, dists, beam_11MeV, print_unc=False) 
-            # plot average light output
-            #a_ql, a_uncert = calc_avg(a_ql, a_uncert, only_uncert=False)
-            #a_ep_err = calc_avg(None, a_ep_err, only_uncert=True)
-            #cp_b_ql, cp_b_uncert = calc_avg(cp_b_ql, cp_b_uncert, only_uncert=False)
-            #cp_b_ep_err = calc_avg( None, cp_b_ep_err, only_uncert=True)
-            #p_erg = p_erg[:6]
 
+            if br_only:
+                a_ql = a_ql[:6]
+                a_uncert = a_uncert[:6]
+                a_fit_ql = a_fit_ql[:6]
+                a_ep_err = a_ep_err[:6]
+                cp_b_ql = cp_b_ql[:6]
+                cp_b_uncert = cp_b_uncert[:6]
+                cp_b_fit_ql = cp_b_fit_ql[:6]
+                cp_b_ep_err = cp_b_ep_err[:6]
         else:
             # account for skipped detectors with 4 MeV beam measurements
             a_ql, cp_b_ql, a_uncert, cp_b_uncert, a_fit_ql, cp_b_fit_ql, a_counts, cp_b_counts  = [], [], [], [], [], [], [], []
             for d, det in enumerate(a_axis_df.det.values):
-                if det in cp_b_axes_df.det.values:
                     a_ql.append(a_axis_df.ql.iloc[np.where(a_axis_df.det == det)].values)
                     a_uncert.append(a_axis_df.abs_uncert.iloc[np.where(a_axis_df.det == det)].values)
                     a_fit_ql.append(a_axis_df.fit_ql.iloc[np.where(a_axis_df.det == det)].values)
                     a_counts.append(a_axis_df.counts.iloc[np.where(a_axis_df.det == det)].values)
+            for d, det in enumerate(cp_b_axes_df.det.values):
                     cp_b_ql.append(cp_b_axes_df.ql.iloc[np.where(cp_b_axes_df.det == det)].values)
                     cp_b_uncert.append(cp_b_axes_df.abs_uncert.iloc[np.where(cp_b_axes_df.det == det)].values)
                     cp_b_fit_ql.append(cp_b_axes_df.fit_ql.iloc[np.where(cp_b_axes_df.det == det)].values)
                     cp_b_counts.append(cp_b_axes_df.counts.iloc[np.where(cp_b_axes_df.det == det)].values)
-                else:
-                    continue
-            a_ep_err = calc_ep_uncerts(a_counts, angles, dists, beam_11MeV, print_unc=False)
-            cp_b_ep_err = calc_ep_uncerts(cp_b_counts, angles, dists, beam_11MeV, print_unc=False)
+  
+            a_ep_err = calc_ep_uncerts(a_counts, a_angles, a_dists, beam_11MeV, print_unc=False)
+            cp_b_ep_err = calc_ep_uncerts(cp_b_counts, cp_b_angles, cp_b_dists, beam_11MeV, print_unc=False)
 
         plt.figure(0)
-        plt.errorbar(p_erg[:6], a_ql[:6], yerr=a_uncert[:6], xerr=a_ep_err[:6], ecolor='black', markerfacecolor='r', fmt=shape, 
-                        markeredgecolor='r', markeredgewidth=1, markersize=7, capsize=1, label= a_axis[i]+label[i])
-        plt.errorbar(p_erg[6:], a_ql[6:], yerr=a_uncert[6:], xerr=a_ep_err[6:], ecolor='black', markerfacecolor='None', fmt=shape, 
-                        markeredgecolor='r', markeredgewidth=1, markersize=7, capsize=1, label= a_axis[i]+label[i])
-        plt.errorbar(p_erg, cp_b_ql, yerr=cp_b_uncert, xerr=cp_b_ep_err, ecolor='black', markerfacecolor='None', fmt=shape, 
-                        markeredgecolor=color, markeredgewidth=1, markersize=7, capsize=1, label=cp_b_axis[i]+label[i])
+        plt.errorbar(a_p_erg, a_ql, yerr=a_uncert, xerr=a_ep_err, ecolor='black', markerfacecolor='None', fmt=shape, 
+                        markeredgecolor='r', markeredgewidth=1, markersize=9, capsize=1, label= a_axis[i]+label[i])
+        plt.errorbar(cp_b_p_erg, cp_b_ql, yerr=cp_b_uncert, xerr=cp_b_ep_err, ecolor='black', markerfacecolor='None', fmt=shape, 
+                        markeredgecolor=color, markeredgewidth=1, markersize=9, capsize=1, label=cp_b_axis[i]+label[i])
     
         a_smoothed, cp_b_smoothed = get_smoothed_data(sin_fits[i], dets)
-        print np.array(a_smoothed)/np.array(cp_b_smoothed)
-        print np.array(a_ql)/np.array(cp_b_ql)
-        plt.errorbar(sorted(p_erg[:6])[::-1], a_smoothed, ecolor='black', markerfacecolor='None', fmt=shape, 
-                        markeredgecolor='r', markeredgewidth=1, markersize=7, capsize=1, label= a_axis[i]+label[i])
-        plt.errorbar(sorted(p_erg[:6])[::-1], cp_b_smoothed, ecolor='black', markerfacecolor='None', fmt=shape, 
-                        markeredgecolor=color, markeredgewidth=1, markersize=7, capsize=1, label=cp_b_axis[i]+label[i])
+        if br_only:
+            if '11MeV' in f:
+                a_erg = a_p_erg
+                cp_erg = cp_b_p_erg[-6:]
+            else:
+                a_erg = a_p_erg[:6]
+                cp_erg = cp_b_p_erg[-6:][::-1]
+                print a_erg, a_smoothed
+            plt.errorbar(a_erg, a_smoothed, ecolor='black', markerfacecolor='None', fmt=shape, 
+                            markeredgecolor='r', markeredgewidth=1, markersize=9, capsize=1, label= a_axis[i]+label[i])
+            plt.errorbar(cp_erg, cp_b_smoothed, ecolor='black', markerfacecolor='None', fmt=shape, 
+                            markeredgecolor=color, markeredgewidth=1, markersize=9, capsize=1, label=cp_b_axis[i]+label[i])
+        else:
+            plt.errorbar(a_p_erg, a_smoothed, ecolor='black', markerfacecolor='None', fmt=shape, 
+                            markeredgecolor='r', markeredgewidth=1, markersize=9, capsize=1, label= a_axis[i]+label[i])
+            plt.errorbar(cp_b_p_erg[-6:][::-1], cp_b_smoothed, ecolor='black', markerfacecolor='None', fmt=shape, 
+                            markeredgecolor=color, markeredgewidth=1, markersize=9, capsize=1, label=cp_b_axis[i]+label[i])
 
         # plot fitted data
         if plot_fit_data:
-            plt.errorbar(p_erg, a_fit_ql, ecolor='black', markerfacecolor='None', fmt=shape, 
-                        markeredgecolor='r', markeredgewidth=1, markersize=7, capsize=1, label= a_axis[i]+label[i])
-            plt.errorbar(p_erg, cp_b_fit_ql, ecolor='black', markerfacecolor='None', fmt=shape, 
-                        markeredgecolor=color, markeredgewidth=1, markersize=7, capsize=1, label=cp_b_axis[i]+label[i])
+            plt.errorbar(a_p_erg, a_fit_ql, ecolor='black', markerfacecolor='None', fmt=shape, 
+                        markeredgecolor='r', markeredgewidth=1, markersize=9, capsize=1, label= a_axis[i]+label[i])
+            plt.errorbar(cp_b_p_erg, cp_b_fit_ql, ecolor='black', markerfacecolor='None', fmt=shape, 
+                        markeredgecolor=color, markeredgewidth=1, markersize=9, capsize=1, label=cp_b_axis[i]+label[i])
         plt.ylabel('Light output (MeVee)')
         plt.xlabel('Proton recoil energy (MeV)')     
         plt.legend(loc=4)
@@ -1605,16 +1624,16 @@ def plot_acp_lo_curves(fin, dets, cwd, p_dir, pulse_shape, plot_fit_data):
 
         # plot relative light output 
         plt.figure(1)
-        plt.errorbar(p_erg, remove_cal(a_ql, m, b)/cal_476, yerr=remove_cal(a_uncert, m, b)/cal_476, ecolor='black', markerfacecolor='None', fmt=shape, 
+        plt.errorbar(a_p_erg, remove_cal(a_ql, m, b)/cal_476, yerr=remove_cal(a_uncert, m, b)/cal_476, ecolor='black', markerfacecolor='None', fmt=shape, 
                         markeredgecolor='r', markeredgewidth=1, markersize=10, capsize=1, label= a_axis[i]+label[i])
-        plt.errorbar(p_erg, remove_cal(cp_b_ql, m, b)/cal_476, yerr=remove_cal(cp_b_uncert, m, b)/cal_476, ecolor='black', markerfacecolor='None', fmt=shape, 
+        plt.errorbar(cp_b_p_erg, remove_cal(cp_b_ql, m, b)/cal_476, yerr=remove_cal(cp_b_uncert, m, b)/cal_476, ecolor='black', markerfacecolor='None', fmt=shape, 
                         markeredgecolor=color, markeredgewidth=1, markersize=10, capsize=1, label=cp_b_axis[i]+label[i])
     
         # plot fitted data
         if plot_fit_data:
-            plt.errorbar(p_erg, remove_cal(a_fit_ql, m, b)/cal_476, ecolor='black', markerfacecolor='None', fmt=shape, 
+            plt.errorbar(a_p_erg, remove_cal(a_fit_ql, m, b)/cal_476, ecolor='black', markerfacecolor='None', fmt=shape, 
                             markeredgecolor='r', markeredgewidth=1, markersize=10, capsize=1, label= a_axis[i]+label[i])
-            plt.errorbar(p_erg, remove_cal(cp_b_fit_ql, m, b)/cal_476, ecolor='black', markerfacecolor='None', fmt=shape, 
+            plt.errorbar(cp_b_p_erg, remove_cal(cp_b_fit_ql, m, b)/cal_476, ecolor='black', markerfacecolor='None', fmt=shape, 
                             markeredgecolor=color, markeredgewidth=1, markersize=10, capsize=1, label=cp_b_axis[i]+label[i])
         plt.yscale('log')
         plt.xscale('log')
@@ -1625,9 +1644,9 @@ def plot_acp_lo_curves(fin, dets, cwd, p_dir, pulse_shape, plot_fit_data):
         plt.legend(loc=4)
 
         plt.figure(2)
-        plt.errorbar(p_erg, new_cal(a_ql, m, b, new_m, b), yerr=a_uncert, ecolor='black', markerfacecolor='None', fmt=shape, 
+        plt.errorbar(a_p_erg, new_cal(a_ql, m, b, new_m, b), yerr=a_uncert, ecolor='black', markerfacecolor='None', fmt=shape, 
                         markeredgecolor='r', markeredgewidth=1, markersize=10, capsize=1, label= a_axis[i]+label[i])
-        plt.errorbar(p_erg, new_cal(cp_b_ql, m, b, new_m, b), yerr=cp_b_uncert, ecolor='black', markerfacecolor='None', fmt=shape, 
+        plt.errorbar(cp_b_p_erg, new_cal(cp_b_ql, m, b, new_m, b), yerr=cp_b_uncert, ecolor='black', markerfacecolor='None', fmt=shape, 
                         markeredgecolor=color, markeredgewidth=1, markersize=10, capsize=1, label=cp_b_axis[i]+label[i])  
         plt.ylabel('Light output (MeVee)')
         plt.xlabel('Proton recoil energy (MeV)')     
@@ -2425,7 +2444,7 @@ def main():
         adc_vs_cal_ratios(fin, dets, cwd, p_dir, plot_fit_ratio=True)
 
     if acp_curves:
-        plot_acp_lo_curves(fin, dets, cwd, p_dir, pulse_shape=False, plot_fit_data=False)
+        plot_acp_lo_curves(fin, dets, cwd, p_dir, pulse_shape=False, br_only=True, plot_fit_data=False)
     
     # 3d plotting
     theta_n = [70, 60, 50, 40, 30, 20, 20, 30, 40, 50, 60, 70]

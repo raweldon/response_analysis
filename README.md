@@ -124,5 +124,6 @@
 
 * 8/13/2019
     * smoothing functions work very well
+    * updated plot_acp_lo_curves - no longer uses BL BR average - either plots both or just BR
 
           
