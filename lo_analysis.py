@@ -278,7 +278,8 @@ def tilt_check(det_data, dets, tilts, pickle_name, cwd, p_dir, beam_11MeV, print
 def smoothing_tilt(dets, pickle_name, cwd, p_dir, print_max_ql, get_a_data, pulse_shape, delayed, prompt, show_plots, save_plots, save_pickle):
     ''' Smoothing assumes BL measurements are more precise than BR (change in anisotropy is greater, BR dets were most likely below the plane of measurement)
             and that the cpvert crystals lower light output at 11 MeV is due to poor calibration
-        
+        Code taken from tilt_check function
+        Normalizes all measurements to max light output measured for a given energy, centers max at a-axis direction
     '''
 
     def fit_tilt_data(data, angles, print_report):
@@ -396,107 +397,14 @@ def smoothing_tilt(dets, pickle_name, cwd, p_dir, print_max_ql, get_a_data, puls
                     data = det_df.ql_mean
                     data_uncert = det_df.ql_abs_uncert
                     counts = det_df.counts
-
-                # fit
-                res = fit_tilt_data(data.values, angles, print_report=False)
-                pars = res.best_values
-                x_vals = np.linspace(0, 190, 100)
-                x_vals_rad = np.deg2rad(x_vals)
-                y_vals = sin_func(x_vals_rad, pars['a'], pars['b'], pars['phi'])
-                #sin_params.append([tilt, det, pars['a'], pars['b'], pars['phi']])
-
-                name = re.split('\.|_', det_df.filename.iloc[0])  
-                # get lo along a, b, c' axes
-                if a_axis_dir[d] in angles:
-                    a_axis_ql = data.iloc[np.where(angles == a_axis_dir[d])].values[0]
-                    #a_axis_ql = max(data.values)
-                    a_axis_data.append([name[0], name[1], name[4], tilt, a_axis_ql, data_uncert.iloc[np.where(angles == a_axis_dir[d])].values[0], 
-                                    y_vals.max(), counts.iloc[np.where(angles == a_axis_dir[d])].values[0]])
-                if cp_b_axes_dir[d] in angles:
-                    cp_b_ql = data.iloc[np.where(angles == cp_b_axes_dir[d])].values[0]
-                    cp_b_axes_data.append([name[0], name[1], name[4], tilt, cp_b_ql, data_uncert.iloc[np.where(angles == cp_b_axes_dir[d])].values[0], 
-                                        y_vals.min(), counts.iloc[np.where(angles == cp_b_axes_dir[d])].values[0]])
-
-                # plot same det angles together
-                #if show_plots:
-                    
-                    #plt.figure(fig_no[d], figsize=(10,8))
-                    #plt.errorbar(angles, data, yerr=data_uncert.values, ecolor='black', markerfacecolor=color[d], fmt='o', 
-                    #            markeredgecolor='k', markeredgewidth=1, markersize=10, capsize=1, label='det ' + str(det))
-                    #
-                    ## annotate
-                    #for rot, ang, t in zip(det_df.rotation, angles, data):
-                    #    plt.annotate( str(rot) + '$^{\circ}$', xy=(ang, t), xytext=(-3, 10), textcoords='offset points')
+              
                 #
-                    ## plot fit
-                    #plt.plot(x_vals, y_vals, '--', color=color[d])
-                    #
-                    ## check a-axis recoils have max ql - 11 and 4 MeV look good
-                    #plt.scatter(angles[np.where(angles == a_axis_dir[d])], data.iloc[np.where(angles == a_axis_dir[d])], c='k', s=120, zorder=10, label=a_label[d])
-                    #plt.scatter(angles[np.where(angles == cp_b_axes_dir[d])], data.iloc[np.where(angles == cp_b_axes_dir[d])], c='g', s=120, zorder=10, label=min_ql_label[d])
-                    #                            
-                    #plt.xlim(-5, max(angles)+5)
-                    #if pulse_shape:
-                    #    plt.ylabel('pulse shape parameter')
-                    #else:
-                    #    plt.ylabel('light output (MeVee)')
-                    #plt.xlabel('rotation angle (degree)')
-                    #name = name[0] + '_' + name[1] + '_' + name[2] + '_' + name[4]
-                    #print name
-                    #plt.title(name)
-                    #plt.legend(fontsize=10)
-                    #if save_plots:
-                    #    if d > 5:
-                    #        if pulse_shape:
-                    #            plt.savefig(cwd + '/figures/tilt_plots/pulse_shape/' + name + '_pulse_shape.png')
-                    #        else:
-                    #            plt.savefig(cwd + '/figures/tilt_plots/' + name + '.png')
-                    #            print 'plots saved to /figures/tilt_plots/' + name + '.png'
-                
-                #
-                # testing smoothing and averaging 
+                # smoothing and averaging 
                 #
                 plt.figure(fig_no[d] + 10, figsize=(10,8))
                 if d > 5:
-                    #if tilt == 0:
-                    #    shifted_angs = [x for x in angles[::-1]]
-                    #    shifted_x = [x for x in np.linspace(0, 180, 100)]
-                    #    y_vals = sin_func(np.deg2rad(shifted_x), pars['a'], pars['b'], pars['phi'])
-                    #    if not beam_11MeV:
-                    #        shifted_angs = [180 - a for a in shifted_angs][::-1]
-                    #else:
-                    #    shifted_angs = angles[::-1]
-                    #    shifted_x = [x for x in x_vals]
-                    #    if not beam_11MeV:
-                    #        shifted_angs = [190 - a for a in shifted_angs][::-1]
-                    #shifted_x, y_vals = [list(t) for t in zip(*sorted(zip(shifted_x, y_vals)))]
-                                    # fit
-                    data = data[::-1]
-                    shifted_angs = angles
-                    res = fit_tilt_data(data.values, angles, print_report=False)
-                    pars = res.best_values
-                    x_vals = np.linspace(0, 190, 100) 
-                    x_vals_rad = np.deg2rad(x_vals)
-                    y_vals = sin_func(x_vals_rad, pars['a'], pars['b'], pars['phi'])
-                    sin_params.append([tilt, det, pars['a'], pars['b'], pars['phi']])
-
-                    #if show_plots:
-                    #    plt.errorbar(shifted_angs, data, yerr=data_uncert.values, ecolor='black', markerfacecolor=color[d], fmt='o', 
-                    #                markeredgecolor='k', markeredgewidth=1, markersize=10, capsize=1, label='det ' + str(det))
-                    #    plt.plot(x_vals, y_vals, '--', color=color[d])
-
+                    continue
                 else:
-                    # use to get scaling factor for smoothing
-
-                    #if beam_11MeV:
-                    #    max_ql = [5.4341, 4.3278, 3.1079, 1.9067, 0.9435, 0.3198] # calulcated above (copy from output)
-                    #else:
-                    #    max_ql = [1.6429, 1.3229, 0.9213, 0.5553, 0.2743, 0.1045]
-#
-                    #c = max(data)/max_ql[d]
-                    #data = data/c
-                    #print max_ql[d], max(data), data.iloc[np.where(angles == a_axis_dir[d])].values
-
                     # fit
                     res = fit_tilt_data(data.values, angles, print_report=False)
                     pars = res.best_values
@@ -504,6 +412,7 @@ def smoothing_tilt(dets, pickle_name, cwd, p_dir, print_max_ql, get_a_data, puls
                     x_vals_rad = np.deg2rad(x_vals)
                     y_vals = sin_func(x_vals_rad, pars['a'], pars['b'], pars['phi'])
 
+                    # use to get scaling factor for smoothing
                     #if tilt == 0 and 'bvert' in f:
                     #    max_ql.append(max(y_vals))
                     #    print max_ql
@@ -513,7 +422,7 @@ def smoothing_tilt(dets, pickle_name, cwd, p_dir, print_max_ql, get_a_data, puls
                     #        print max_ql
 
                     if beam_11MeV:
-                        max_ql = [5.361060691111871, 4.321438060046981, 3.087094177473607, 1.902, 0.9435, 0.3169] # calulcated above (copy from output)
+                        max_ql = [5.361060691111871, 4.321438060046981, 3.087094177473607, 1.902, 0.9435, 0.3169] # calulcated directly above (uncomment, copy from output)
                     else:
                         max_ql = [1.6429, 1.3094, 0.9084, 0.5553, 0.2733, 0.1042]
 
@@ -992,6 +901,9 @@ def plot_avg_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, th
     mlab.show()
 
 def plot_smoothed_fitted_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV, multiplot, save_multiplot):
+    ''' Plots data from smoothing_tilt()
+        Taken from plot_fitted_heatmaps
+    '''
 
     def map_smoothed_fitted_data_3d(data, det, tilts, crystal_orientation, theta_neutron, phi_neutron, beam_11MeV):
         # like map_data_3d but for fitted data
@@ -1212,8 +1124,29 @@ def plot_ratios(fin, dets, cwd, p_dir, pulse_shape, plot_fit_ratio):
         Set pulse_shape=True for pulse shape ratios
         Uses tilt_check function to get data from dataframes
     '''
+
+    sin_fits = ['bvert_11MeV_sin_params_smoothed.p', 'cpvert_11MeV_sin_params_smoothed.p', 'bvert_4MeV_sin_params_smoothed.p', 'cpvert_4MeV_sin_params_smoothed.p']   
+    def get_smoothed_data(f, dets):
+        ratio = []
+        for d, det in enumerate(dets):
+            if d > 5:
+                continue
+            data = pd_load(f, p_dir)
+            det_df = data.loc[(data.det == det)]
+            for t, tilt in enumerate(tilts):
+                if tilt == 0:
+                    tilt_df = det_df.loc[(data.tilt == tilt)]
+                    angles = np.arange(0, 180, 5) # 5 and 2 look good
+                
+                    ql = sin_func(np.deg2rad(angles), tilt_df['a'].values, tilt_df['b'].values, tilt_df['phi'].values)
+                    ratio.append(max(ql)/min(ql))                
+                else:
+                    continue
+        return ratio
+
     for i, f in enumerate(fin):
         label_fit = ['', '', '', 'fit ratios']
+        label_smooth = ['', '', '', 'smooth fit ratios']
         label = ['L$_a$/L$_c\'$', 'L$_a$/L$_b$', '', '']
         label_pat = ['', '', '', 'Schuster ratios']
         if '11' in f:
@@ -1311,11 +1244,18 @@ def plot_ratios(fin, dets, cwd, p_dir, pulse_shape, plot_fit_ratio):
             if plot_fit_ratio:
                 plt.errorbar(p_erg, fit_ratio, ecolor='black', markerfacecolor='None', fmt='s', 
                              markeredgecolor='g', markeredgewidth=1, markersize=10, capsize=1, label=label_fit[i])
+            # plot smoothed ratios
+            smoothed_ratio = get_smoothed_data(sin_fits[i], dets)
+            print p_erg, smoothed_ratio
+            plt.errorbar(p_erg[:6], smoothed_ratio, ecolor='black', markerfacecolor='None', fmt='>', 
+            markeredgecolor='k', markeredgewidth=1, markersize=10, capsize=1, label=label_smooth[i])
+
             xmin, xmax = plt.xlim(0, 11)
             plt.plot(np.linspace(xmin, xmax, 10), [1.0]*10, 'k--')
             plt.ylabel('light output ratio')
             plt.legend()
             plt.xlabel('proton recoil energy (MeV)')     
+        
     plt.show()
 
 def adc_vs_cal_ratios(fin, dets, cwd, p_dir, plot_fit_ratio):
@@ -1532,8 +1472,25 @@ def plot_acp_lo_curves(fin, dets, cwd, p_dir, pulse_shape, plot_fit_data):
             uncert = np.array([np.sqrt((uncert[:6][i]**2 + u**2)/2) for i, u in enumerate(uncert[6:][::-1])])
             return avg, uncert
 
+    sin_fits = ['bvert_11MeV_sin_params_smoothed.p', 'cpvert_11MeV_sin_params_smoothed.p', 'bvert_4MeV_sin_params_smoothed.p', 'cpvert_4MeV_sin_params_smoothed.p']   
+    def get_smoothed_data(f, dets):
+        ql_max, ql_min = [], []
+        for d, det in enumerate(dets):
+            if d > 5:
+                continue
+            data = pd_load(f, p_dir)
+            det_df = data.loc[(data.det == det)]
+         
+            tilt_df = det_df.loc[(data.tilt == 0)]
+            angles = np.arange(0, 180, 5) # 5 and 2 look good
+            ql = sin_func(np.deg2rad(angles), tilt_df['a'].values, tilt_df['b'].values, tilt_df['phi'].values)
+            ql_max.append(max(ql))
+            ql_min.append(min(ql))                               
+        return ql_max, ql_min
+
     for i, f in enumerate(fin):
         label_fit = ['', '', '', 'fit ratios']
+        label_smooth = ['', '', '', 'smooth fit ratios']
         label = [', b-vert', ', c\'-vert',  '', '']
         a_axis = ['a-axis', 'a-axis', '', '']
         cp_b_axis = ['cp-axis', 'b-axis', '', '']
@@ -1625,6 +1582,14 @@ def plot_acp_lo_curves(fin, dets, cwd, p_dir, pulse_shape, plot_fit_data):
         plt.errorbar(p_erg, cp_b_ql, yerr=cp_b_uncert, xerr=cp_b_ep_err, ecolor='black', markerfacecolor='None', fmt=shape, 
                         markeredgecolor=color, markeredgewidth=1, markersize=7, capsize=1, label=cp_b_axis[i]+label[i])
     
+        a_smoothed, cp_b_smoothed = get_smoothed_data(sin_fits[i], dets)
+        print np.array(a_smoothed)/np.array(cp_b_smoothed)
+        print np.array(a_ql)/np.array(cp_b_ql)
+        plt.errorbar(sorted(p_erg[:6])[::-1], a_smoothed, ecolor='black', markerfacecolor='None', fmt=shape, 
+                        markeredgecolor='r', markeredgewidth=1, markersize=7, capsize=1, label= a_axis[i]+label[i])
+        plt.errorbar(sorted(p_erg[:6])[::-1], cp_b_smoothed, ecolor='black', markerfacecolor='None', fmt=shape, 
+                        markeredgecolor=color, markeredgewidth=1, markersize=7, capsize=1, label=cp_b_axis[i]+label[i])
+
         # plot fitted data
         if plot_fit_data:
             plt.errorbar(p_erg, a_fit_ql, ecolor='black', markerfacecolor='None', fmt=shape, 
@@ -2441,6 +2406,7 @@ def main():
             tilt_check(data, dets, tilts, f, cwd, p_dir, beam_11MeV, print_max_ql=False, get_a_data=True, pulse_shape=True, 
                         delayed=False, prompt=False, show_plots=True, save_plots=False, save_pickle=False)
 
+    # cleans measured data
     if smooth_tilt:
         smoothing_tilt(dets, fin, cwd, p_dir, print_max_ql=False, get_a_data=True, pulse_shape=False, 
                     delayed=False, prompt=False, show_plots=False, save_plots=False, save_pickle=True)
@@ -2451,7 +2417,7 @@ def main():
 
     # plot ratios
     if ratios_plot:
-        plot_ratios(fin, dets, cwd, p_dir, pulse_shape=True, plot_fit_ratio=False)
+        plot_ratios(fin, dets, cwd, p_dir, pulse_shape=False, plot_fit_ratio=True)
 
     if adc_vs_cal:
         adc_vs_cal_ratios(fin, dets, cwd, p_dir, plot_fit_ratio=True)
@@ -2498,6 +2464,7 @@ def main():
         plot_avg_heatmaps(fin[2], fin[3], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=False, 
                       plot_pulse_shape=False, multiplot=False, save_multiplot=False, show_delaunay=False)
 
+    # plots smoothed data from smooth_tilt()
     sin_fits = ['bvert_11MeV_sin_params_smoothed.p', 'cpvert_11MeV_sin_params_smoothed.p', 'bvert_4MeV_sin_params_smoothed.p', 'cpvert_4MeV_sin_params_smoothed.p']                     
     if smoothed_fitted_heatmap_11:
         plot_smoothed_fitted_heatmaps(sin_fits[0], sin_fits[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, multiplot=False, save_multiplot=False)
@@ -2533,6 +2500,7 @@ if __name__ == '__main__':
     # check lo for a specific tilt (sinusoids)
     check_tilt = False
 
+    # smooth measured data
     smooth_tilt = False
 
     # compare a_axis recoils (all tilts measure ql along a-axis)
@@ -2541,11 +2509,11 @@ if __name__ == '__main__':
     # plots a/c' and a/b ql or pulse shape ratios from 0deg measurements
     ratios_plot = False
 
-    # analyze relative light output ratios agains calibrated data ratios
+    # analyze relative light output ratios agains calibrated data ratios (used to identify original calibration issues)
     adc_vs_cal = False
 
     # plot a, cp LO curves
-    acp_curves = False
+    acp_curves = True
 
     # plot heatmaps with data points
     heatmap_11 = False 
@@ -2559,8 +2527,9 @@ if __name__ == '__main__':
     avg_heatmap_11 = False 
     avg_heatmap_4 = False
 
-    smoothed_fitted_heatmap_11 = True
-    smoothed_fitted_heatmap_4 =  True
+    # plot smoothed measured data
+    smoothed_fitted_heatmap_11 = False
+    smoothed_fitted_heatmap_4 =  False
 
     # polar plots
     polar_plots = False
