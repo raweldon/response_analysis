@@ -475,7 +475,7 @@ def smoothing_tilt(dets, pickle_name, cwd, p_dir, print_max_ql, get_a_data, puls
                     shifted_angs = angles
                     res = fit_tilt_data(data.values, angles, print_report=False)
                     pars = res.best_values
-                    x_vals = np.linspace(0, 190, 100)
+                    x_vals = np.linspace(0, 190, 100) 
                     x_vals_rad = np.deg2rad(x_vals)
                     y_vals = sin_func(x_vals_rad, pars['a'], pars['b'], pars['phi'])
                     sin_params.append([tilt, det, pars['a'], pars['b'], pars['phi']])
@@ -500,7 +500,7 @@ def smoothing_tilt(dets, pickle_name, cwd, p_dir, print_max_ql, get_a_data, puls
                     # fit
                     res = fit_tilt_data(data.values, angles, print_report=False)
                     pars = res.best_values
-                    x_vals = np.linspace(0, 190, 100)
+                    x_vals = np.linspace(0, 190, 1000)
                     x_vals_rad = np.deg2rad(x_vals)
                     y_vals = sin_func(x_vals_rad, pars['a'], pars['b'], pars['phi'])
 
@@ -522,7 +522,16 @@ def smoothing_tilt(dets, pickle_name, cwd, p_dir, print_max_ql, get_a_data, puls
                     y_vals = y_vals/c
                     res = fit_tilt_data(data.values, angles, print_report=False)
                     pars = res.best_values
-                    print max_ql[d], max(y_vals), data.iloc[np.where(angles == a_axis_dir[d])].values
+                    #print max_ql[d], max(y_vals), data.iloc[np.where(angles == a_axis_dir[d])].values
+
+                    # shift max y_val to a-axis direction (all sinusoid maxes are aligned)
+                    max_yidx = np.argmax(y_vals)
+                    diff = x_vals[max_yidx] - a_axis_dir[d]
+                    x_vals -= diff
+                    res = fit_tilt_data(y_vals, x_vals, print_report=False)
+                    pars = res.best_values
+                    print y_vals[max_yidx], x_vals[max_yidx], a_axis_dir[d], diff
+
                     sin_params.append([tilt, det, pars['a'], pars['b'], pars['phi']])
 
                     if show_plots:
@@ -987,19 +996,24 @@ def plot_smoothed_fitted_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_u
     def map_smoothed_fitted_data_3d(data, det, tilts, crystal_orientation, theta_neutron, phi_neutron, beam_11MeV):
         # like map_data_3d but for fitted data
         det_df = data.loc[(data.det == det)]
-        ql_all, theta_p, phi_p = [], [], []
+        ql_all, theta_p, phi_p, angles_p = [], [], [], []
         for t, tilt in enumerate(tilts):
             
             tilt_df = det_df.loc[(data.tilt == tilt)]
             angles = np.arange(0, 180, 5) # 5 and 2 look good
       
             ql = sin_func(np.deg2rad(angles), tilt_df['a'].values, tilt_df['b'].values, tilt_df['phi'].values)
+
+            #plt.figure(0)
+            #plt.plot(angles, ql, 'o')
+            
             thetap, phip = map_3d(tilt, crystal_orientation, angles, theta_neutron, phi_neutron)       
             ql_all.extend(ql)
             theta_p.extend(thetap)
             phi_p.extend(phip)
+            angles_p.extend(angles)
     
-        d = {'ql': ql_all, 'theta': theta_p, 'phi': phi_p}
+        d = {'ql': ql_all, 'theta': theta_p, 'phi': phi_p, 'angles': angles_p}
         df = pd.DataFrame(data=d)
         return df
 
@@ -1021,6 +1035,10 @@ def plot_smoothed_fitted_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_u
         phi_b = np.concatenate([df_b_mapped.phi.values, df_b_mapped_mirror.phi.values])
         phi_cp = np.concatenate([df_cp_mapped.phi.values, df_cp_mapped_mirror.phi.values])
 
+        angles_b = np.concatenate([df_b_mapped.angles.values, df_b_mapped_mirror.angles.values])
+        angles_cp = np.concatenate([df_cp_mapped.angles.values, df_cp_mapped_mirror.angles.values])
+        angles = np.concatenate((angles_b, angles_cp))
+
         x_b, y_b, z_b = polar_to_cartesian(theta_b, phi_b, b_up, cp_up)
         x_cp, y_cp, z_cp = polar_to_cartesian(theta_cp, phi_cp, cp_up, cp_up)
 
@@ -1035,6 +1053,18 @@ def plot_smoothed_fitted_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_u
         xyz, indices = np.unique(xyz, axis=0, return_index=True)
         ql = ql[indices]
         x, y, z = xyz.T
+
+        # recover theta, phi to check 3d plotting
+        theta = np.arccos(z)
+        phi = []
+        for a, b in zip(x, y):
+            if (abs(a) < 1e-5 and abs(b) < 1e-5):
+                print a, b
+                p = 0.
+            else:
+                p = np.arctan(b/a) 
+            phi.append(p)
+        phi = np.array(phi)  
 
         if multiplot:
             heatmap_multiplot(x, y, z, ql, theta_n, d, cwd, save_multiplot, beam_11MeV, fitted=True)
@@ -1054,13 +1084,14 @@ def plot_smoothed_fitted_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_u
             tri_smooth = mlab.pipeline.poly_data_normals(tri) # smooths delaunay triangulation mesh
             surf = mlab.pipeline.surface(tri_smooth, colormap='viridis')
             
-            #for x_val, y_val, z_val, ql_val in zip(x, y, z, ql):
-            #    mlab.text3d(x_val, y_val, z_val-0.1, str(round(ql_val,2)), scale=0.03, color=(0,0,0), figure=fig)
+            #for x_val, y_val, z_val, ql_val, th, ph in zip(x, y, z, ql, np.concatenate((theta_b, theta_cp))[indices], angles[indices]):
+            #    mlab.text3d(x_val, y_val, z_val, str(round(ph, 2)), scale=0.02, color=(0,0,0), figure=fig)
 
             mlab.axes(pts, xlabel='a', ylabel='b', zlabel='c\'')
             mlab.colorbar(surf, orientation='vertical') 
             mlab.view(azimuth=0, elevation=-90, distance=7.5, figure=fig)            
             mlab.show()  
+        #plt.show()
 
 def compare_a_axis_recoils(fin, dets, cwd, p_dir, plot_by_det, save_plots):
 
@@ -1926,6 +1957,7 @@ def lsq_sph_biv_spl(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, thet
         Note - they are the same if weights are not used with lsq
         Current method used SmoothSphere
         Adjust fitted grid and s parameter to change smoothing
+        Note: has issues with fitting values less than 1.0 (11MeV 20 and 30 deg, 4 MeV - most)
     '''
     from scipy.interpolate import LSQSphereBivariateSpline as lsqsbs
     from scipy.interpolate import SmoothSphereBivariateSpline as ssbs
@@ -2051,10 +2083,10 @@ def lsq_sph_biv_spl(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, thet
 
         #mlab.axes(pts, xlabel='a', ylabel='b', zlabel='c\'')
         #mlab.colorbar(surf, orientation='vertical') 
-        #mlab.show()
+        mlab.show()
 
 def legendre_poly_fit(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV, plot_pulse_shape, multiplot, save_multiplot):
-    ''' Note: abandoned because it does not reproduce max and min LO well (i.e. the LO rations are underpredicted)'''
+    ''' Note: abandoned because it does not reproduce max and min LO well (i.e. the LO rations are underpredicted - > 5% and worse for low energy scatters)'''
 
     from scipy.special import lpmv 
 
@@ -2305,6 +2337,9 @@ def legendre_poly_fit(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, th
         mlab.show()
 
 def lambertian(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV, plot_pulse_shape, multiplot, save_multiplot):
+    ''' 2D lambertian projection of the 3D spherical data
+        Interpolation currently performed with griddata built in methods (linear (current), cubic, nearest)
+    '''
     data_bvert = pd_load(fin1, p_dir)
     data_bvert = split_filenames(data_bvert)
     data_cpvert = pd_load(fin2, p_dir)
@@ -2525,7 +2560,7 @@ if __name__ == '__main__':
     avg_heatmap_4 = False
 
     smoothed_fitted_heatmap_11 = True
-    smoothed_fitted_heatmap_4 = True
+    smoothed_fitted_heatmap_4 =  True
 
     # polar plots
     polar_plots = False
