@@ -1506,7 +1506,7 @@ def plot_acp_lo_curves(fin, dets, cwd, p_dir, pulse_shape, plot_fit_data):
             p_erg = 4.825*np.sin(np.deg2rad(angles))**2
         if 'bvert' in f:
             #tilts = [0, 45, -45, 30, -30, 15, -15]
-            tilts = [45]
+            tilts = [0]
             color = 'b'
             shape = '^'
             if '11MeV' in f:
@@ -1547,16 +1547,16 @@ def plot_acp_lo_curves(fin, dets, cwd, p_dir, pulse_shape, plot_fit_data):
             a_uncert = a_axis_df.abs_uncert.values
             a_fit_ql = a_axis_df.fit_ql.values
             a_ep_err = calc_ep_uncerts(a_axis_df.counts.values, angles, dists, beam_11MeV, print_unc=False) 
-            a_ep_err = calc_avg(None, a_ep_err, only_uncert=True)
             cp_b_ql = cp_b_axes_df.ql.values
             cp_b_uncert = cp_b_axes_df.abs_uncert.values
             cp_b_fit_ql = cp_b_axes_df.fit_ql.values
             cp_b_ep_err = calc_ep_uncerts(cp_b_axes_df.counts.values, angles, dists, beam_11MeV, print_unc=False) 
-            cp_b_ep_err = calc_avg( None, cp_b_ep_err, only_uncert=True)
             # plot average light output
-            a_ql, a_uncert = calc_avg(a_ql, a_uncert, only_uncert=False)
-            cp_b_ql, cp_b_uncert = calc_avg(cp_b_ql, cp_b_uncert, only_uncert=False)
-            p_erg = p_erg[:6]
+            #a_ql, a_uncert = calc_avg(a_ql, a_uncert, only_uncert=False)
+            #a_ep_err = calc_avg(None, a_ep_err, only_uncert=True)
+            #cp_b_ql, cp_b_uncert = calc_avg(cp_b_ql, cp_b_uncert, only_uncert=False)
+            #cp_b_ep_err = calc_avg( None, cp_b_ep_err, only_uncert=True)
+            #p_erg = p_erg[:6]
 
         else:
             # account for skipped detectors with 4 MeV beam measurements
@@ -1577,7 +1577,9 @@ def plot_acp_lo_curves(fin, dets, cwd, p_dir, pulse_shape, plot_fit_data):
             cp_b_ep_err = calc_ep_uncerts(cp_b_counts, angles, dists, beam_11MeV, print_unc=False)
 
         plt.figure(0)
-        plt.errorbar(p_erg, a_ql, yerr=a_uncert, xerr=a_ep_err, ecolor='black', markerfacecolor='None', fmt=shape, 
+        plt.errorbar(p_erg[:6], a_ql[:6], yerr=a_uncert[:6], xerr=a_ep_err[:6], ecolor='black', markerfacecolor='r', fmt=shape, 
+                        markeredgecolor='r', markeredgewidth=1, markersize=7, capsize=1, label= a_axis[i]+label[i])
+        plt.errorbar(p_erg[6:], a_ql[6:], yerr=a_uncert[6:], xerr=a_ep_err[6:], ecolor='black', markerfacecolor='None', fmt=shape, 
                         markeredgecolor='r', markeredgewidth=1, markersize=7, capsize=1, label= a_axis[i]+label[i])
         plt.errorbar(p_erg, cp_b_ql, yerr=cp_b_uncert, xerr=cp_b_ep_err, ecolor='black', markerfacecolor='None', fmt=shape, 
                         markeredgecolor=color, markeredgewidth=1, markersize=7, capsize=1, label=cp_b_axis[i]+label[i])

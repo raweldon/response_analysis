@@ -125,5 +125,4 @@
 * 8/13/2019
     * smoothing functions work very well
 
-Next: remove average from lo curves, only us BR data
           
