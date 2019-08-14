@@ -126,4 +126,8 @@
     * smoothing functions work very well
     * updated plot_acp_lo_curves - no longer uses BL BR average - either plots both or just BR
 
+* 8/14/2019
+    * updating uncertainties
+    * new lambertian_smooth function with uncerts
+
           

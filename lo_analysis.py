@@ -275,7 +275,7 @@ def tilt_check(det_data, dets, tilts, pickle_name, cwd, p_dir, beam_11MeV, print
         #pickle.dump( a_axis_data, open( p_dir + 'a_axis_data.p', 'wb'))
         return pd.DataFrame(a_axis_data, columns=headers), pd.DataFrame(cp_b_axes_data, columns=headers)
 
-def smoothing_tilt(dets, pickle_name, cwd, p_dir, print_max_ql, get_a_data, pulse_shape, delayed, prompt, show_plots, save_plots, save_pickle):
+def smoothing_tilt(dets, pickle_name, cwd, p_dir, pulse_shape, delayed, prompt, show_plots, save_plots, save_pickle):
     ''' Smoothing assumes BL measurements are more precise than BR (change in anisotropy is greater, BR dets were most likely below the plane of measurement)
             and that the cpvert crystals lower light output at 11 MeV is due to poor calibration
         Code taken from tilt_check function
@@ -294,19 +294,6 @@ def smoothing_tilt(dets, pickle_name, cwd, p_dir, print_max_ql, get_a_data, puls
                 print '\n', lmfit.fit_report(res)
             return res
 
-    def get_max_ql_per_det(det_data, dets, tilts):
-        # use to check max_ql values for each tilt per detector (all tilts measure recoils along the a-axis)
-        for det in dets:
-            print '\n-----------\ndet_no ', det, '\n-----------\n'
-            print 'tilt      ql'
-            det_df = det_data.loc[(det_data.det_no == str(det))]
-            for tilt in tilts:
-                tilt_df = det_df.loc[(det_df.tilt == str(tilt))]
-                tilt_df = tilt_df.reset_index()
-                idxmax = tilt_df.ql_mean.idxmax()
-                max_col = tilt_df.iloc[idxmax]
-                print '{:^5} {:>8}'.format(max_col.tilt, max_col.ql_mean)
-
     for f in pickle_name:
         if '11' in f:
             beam_11MeV = True
@@ -320,9 +307,6 @@ def smoothing_tilt(dets, pickle_name, cwd, p_dir, print_max_ql, get_a_data, puls
 
         data = pd_load(f, p_dir)
         det_data = split_filenames(data)
- 
-        if print_max_ql:
-            get_max_ql_per_det(det_data, dets, tilts)
 
         if pulse_shape:
             print '\nANALYZING PULSE SHAPE DATA'
@@ -405,6 +389,10 @@ def smoothing_tilt(dets, pickle_name, cwd, p_dir, print_max_ql, get_a_data, puls
                 if d > 5:
                     continue
                 else:
+                    name = re.split('\.|_', det_df.filename.iloc[0]) 
+                    name = name[0] + '_' + name[1] + '_' + name[2] + '_' + name[4]
+                    print name
+                    
                     # fit
                     res = fit_tilt_data(data.values, angles, print_report=False)
                     pars = res.best_values
@@ -412,7 +400,7 @@ def smoothing_tilt(dets, pickle_name, cwd, p_dir, print_max_ql, get_a_data, puls
                     x_vals_rad = np.deg2rad(x_vals)
                     y_vals = sin_func(x_vals_rad, pars['a'], pars['b'], pars['phi'])
 
-                    # use to get scaling factor for smoothing
+                    ## use to get scaling factor for smoothing
                     #if tilt == 0 and 'bvert' in f:
                     #    max_ql.append(max(y_vals))
                     #    print max_ql
@@ -422,9 +410,16 @@ def smoothing_tilt(dets, pickle_name, cwd, p_dir, print_max_ql, get_a_data, puls
                     #        print max_ql
 
                     if beam_11MeV:
-                        max_ql = [5.361060691111871, 4.321438060046981, 3.087094177473607, 1.902, 0.9435, 0.3169] # calulcated directly above (uncomment, copy from output)
+                        if pulse_shape:
+                            max_ql = [0.3211530198583945, 0.3310542105630364, 0.34502415458937197, 0.3687198259854635, 0.3996132774734128, 0.4287629902782434]
+                        else:
+                            max_ql = [5.361060691111871, 4.321438060046981, 3.087094177473607, 1.902, 0.9435, 0.3169] # calulcated directly above (uncomment, copy from output)
                     else:
-                        max_ql = [1.6429, 1.3094, 0.9084, 0.5553, 0.2733, 0.1042]
+                        if pulse_shape:
+                            max_ql = [0.36916873449131526, 0.37724319306930687, 0.39375000000000004, 0.40695108495770493, 0.4193293885601578, 0.38900203665987776]
+                        else:
+                            max_ql = [1.6429, 1.3094, 0.9084, 0.5553, 0.2733, 0.1042]
+
 
                     c = max(y_vals)/max_ql[d]
                     data = data/c
@@ -458,19 +453,20 @@ def smoothing_tilt(dets, pickle_name, cwd, p_dir, print_max_ql, get_a_data, puls
                         else:
                             plt.ylabel('light output (MeVee)')
                         plt.xlabel('rotation angle (degree)')
-                        name = name[0] + '_' + name[1] + '_' + name[2] + '_' + name[4]
-                        print name
                         plt.title(name)
                         plt.legend(fontsize=10)
                     
         if show_plots:
             plt.show()
 
-        #print max_ql
+        #print '\n\nFinal max vals:\n', max_ql
         # save sinusoid fit to pickle
         if save_pickle:
             name = f.split('.')[0]
-            out = open( p_dir + name + '_sin_params_smoothed.p', "wb" )
+            if pulse_shape:
+                out = open( p_dir + name + '_sin_params_smoothed_ps.p', "wb" )
+            else:
+                out = open( p_dir + name + '_sin_params_smoothed.p', "wb" )
             pickle.dump( sin_params, out)
             out.close()
             print 'pickle saved to ' + p_dir + name + '_sin_params_smoothed.p'
@@ -900,7 +896,7 @@ def plot_avg_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, th
                 heatmap_singleplot(x, y, z, ps, tilts, 'qs/ql', show_delaunay)
     mlab.show()
 
-def plot_smoothed_fitted_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV, multiplot, save_multiplot):
+def plot_smoothed_fitted_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, pulse_shape, beam_11MeV, multiplot, save_multiplot):
     ''' Plots data from smoothing_tilt()
         Taken from plot_fitted_heatmaps
     '''
@@ -928,6 +924,12 @@ def plot_smoothed_fitted_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_u
         d = {'ql': ql_all, 'theta': theta_p, 'phi': phi_p, 'angles': angles_p}
         df = pd.DataFrame(data=d)
         return df
+
+    if pulse_shape:
+        f1 = fin1.split('.')
+        fin1 = f1[0] + '_ps.' + f1[1]
+        f2 = fin2.split('.')
+        fin2 = f2[0] + '_ps.' + f2[1]
 
     data_bvert = pd_load(fin1, p_dir)
     data_cpvert = pd_load(fin2, p_dir)
@@ -2322,18 +2324,19 @@ def legendre_poly_fit(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, th
 
         mlab.show()
 
-def lambertian(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV, plot_pulse_shape, multiplot, save_multiplot):
+def lambertian(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV, pulse_shape):
     ''' 2D lambertian projection of the 3D spherical data
         Interpolation currently performed with griddata built in methods (linear (current), cubic, nearest)
     '''
+
+    avg_uncerts, avg_qls = get_avg_lo_uncert(fin1, fin2, p_dir, dets, pulse_shape) 
+
     data_bvert = pd_load(fin1, p_dir)
     data_bvert = split_filenames(data_bvert)
     data_cpvert = pd_load(fin2, p_dir)
     data_cpvert = split_filenames(data_cpvert)
 
     for d, det in enumerate(dets):       
-        #if d > 0 :
-        #    continue
         print '\ndet_no =', det, 'theta_n =', theta_n[d]
         df_b_mapped = map_data_3d(data_bvert, det, bvert_tilt, b_up, theta_n[d], phi_n[d], beam_11MeV) 
         df_b_mapped_mirror = map_data_3d(data_bvert, det, bvert_tilt, np.asarray(((1,0,0), (0,1,0), (0,0,-1))), theta_n[d], phi_n[d], beam_11MeV)
@@ -2364,6 +2367,10 @@ def lambertian(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, 
         ql_uncert = ql_uncert[indices]
         tilts = tilts[indices]
         x, y, z = xyz_u.T
+        if pulse_shape:
+            qs = np.concatenate([df_b_mapped.qs_mean.values, df_b_mapped_mirror.qs_mean.values, df_cp_mapped.qs_mean.values, df_cp_mapped_mirror.qs_mean.values])
+            qs = qs[indices]
+            ps = [1 - a/b for a, b in zip(qs, ql)]
 
         # convert to lambertian projection (from https://en.wikipedia.org/wiki/Lambert_azimuthal_equal-area_projection)
         X, Y = [], []
@@ -2379,20 +2386,26 @@ def lambertian(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, 
         X = np.array(X)/max(X)
         Y = np.array(Y)/max(Y)
 
-        print np.mean(ql_uncert), np.std(ql_uncert)
+        #print np.mean(ql_uncert), np.std(ql_uncert)
         grid_x, grid_y = np.mgrid[-1:1:2000j, -1:1:2000j]
         #methods = ('nearest', 'linear', 'cubic')
         methods = ('linear',)
         plt.rcParams['axes.facecolor'] = 'grey'
         f = 14
         for method in methods:
-            interp = scipy.interpolate.griddata((X, Y), ql, (grid_x, grid_y), method=method)
-            print max(ql), min(ql), max(ql)/min(ql)
+            if pulse_shape:
+                interp = scipy.interpolate.griddata((X, Y), ps, (grid_x, grid_y), method=method)
+                print max(ps), min(ps), max(ps)/min(ps)
+            else:
+                interp = scipy.interpolate.griddata((X, Y), ql, (grid_x, grid_y), method=method)
+                print max(ql), min(ql), max(ql)/min(ql)
             plt.figure()
             plt.imshow(interp.T, extent=(-1,1,-1,1), origin='lower', cmap='viridis', interpolation='none')
             plt.scatter(X, Y, c=ql, cmap='viridis')
+            avg_uncert = avg_uncerts[d]/(max(ql) - min(ql))
             cbar = plt.colorbar()
-            #print cbar.ax.get_position()
+            cbar.ax.errorbar(0.5, 0.5, yerr=avg_uncert)
+            print '{:^6.3f} {:>6.3f} {:>6.3f}'.format(np.mean(ql), avg_uncerts[d], avg_uncert)
             plt.text(-0.71, 0.0, 'a', color='r', fontsize=f)
             plt.text(0.71, 0., 'a', color='r', fontsize=f)
             plt.text(0, 0.0, 'c\'', color='r', fontsize=f)
@@ -2402,6 +2415,153 @@ def lambertian(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, 
             plt.yticks([])
             plt.tight_layout()
     plt.show()
+
+def get_avg_lo_uncert(fin1, fin2, p_dir, dets, pulse_shape):
+
+    data_bvert = pd_load(fin1, p_dir)
+    data_bvert = split_filenames(data_bvert)
+    data_cpvert = pd_load(fin2, p_dir)
+    data_cpvert = split_filenames(data_cpvert)
+
+    uncert, mean_ql = [], []
+    for data in (data_bvert, data_cpvert):
+        for d, det in enumerate(dets):
+            if pulse_shape:
+                det_df = data.loc[(data.det_no == str(det))]
+                #print det, det_df.ql_abs_uncert.mean(), det_df.ql_abs_uncert.max(), det_df.ql_abs_uncert.median()
+                uncert.append(1 - det_df.qs_abs_uncert.mean()/det_df.ql_abs_uncert.mean())
+                mean_ql.append(det_df.ql_mean.mean())
+            else:
+                det_df = data.loc[(data.det_no == str(det))]
+                #print det, det_df.ql_abs_uncert.mean(), det_df.ql_abs_uncert.max(), det_df.ql_abs_uncert.median()
+                uncert.append(det_df.ql_abs_uncert.mean())
+                mean_ql.append(det_df.ql_mean.mean())
+    
+    uncerts = [(x + y)/2 for x, y in zip(uncert[:len(dets)], uncert[len(dets):])]
+    mean_qls = [(x + y)/2 for x, y in zip(mean_ql[:len(dets)], mean_ql[len(dets):])]
+    cal_uncerts = [0.01*q + u for q, u in zip(mean_qls, uncerts)]
+    #for i, j, k in zip(uncerts, cal_uncerts, mean_qls):
+    #    print i, j, k, j/k*100, '%'
+    return cal_uncerts, mean_qls
+
+def lambertian_smooth(fin1, fin2, fin, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV, pulse_shape):
+    ''' 2D lambertian projection of the 3D spherical data
+        Interpolation currently performed with griddata built in methods (linear (current), cubic, nearest)
+    '''
+    def map_smoothed_fitted_data_3d(data, det, tilts, crystal_orientation, theta_neutron, phi_neutron, beam_11MeV):
+        # like map_data_3d but for fitted data
+        det_df = data.loc[(data.det == det)]
+        ql_all, theta_p, phi_p, angles_p = [], [], [], []
+        for t, tilt in enumerate(tilts):
+            
+            tilt_df = det_df.loc[(data.tilt == tilt)]
+            angles = np.arange(0, 180, 5) # 5 and 2 look good
+      
+            ql = sin_func(np.deg2rad(angles), tilt_df['a'].values, tilt_df['b'].values, tilt_df['phi'].values)
+
+            #plt.figure(0)
+            #plt.plot(angles, ql, 'o')
+            
+            thetap, phip = map_3d(tilt, crystal_orientation, angles, theta_neutron, phi_neutron)       
+            ql_all.extend(ql)
+            theta_p.extend(thetap)
+            phi_p.extend(phip)
+            angles_p.extend(angles)
+    
+        d = {'ql': ql_all, 'theta': theta_p, 'phi': phi_p, 'angles': angles_p}
+        df = pd.DataFrame(data=d)
+        return df
+
+    avg_uncerts, avg_qls = get_avg_lo_uncert(fin[0], fin[1], p_dir, dets, pulse_shape) 
+    if pulse_shape:
+        f1 = fin1.split('.')
+        fin1 = f1[0] + '_ps.' + f1[1]
+        f2 = fin2.split('.')
+        fin2 = f2[0] + '_ps.' + f2[1]
+
+    data_bvert = pd_load(fin1, p_dir)
+    data_cpvert = pd_load(fin2, p_dir)
+    
+    for d, det in enumerate(dets):
+        if d > 5:
+            continue
+        print 'det_no =', det, 'theta_n =', theta_n[d]
+        df_b_mapped = map_smoothed_fitted_data_3d(data_bvert, det, bvert_tilt, b_up, theta_n[d], phi_n[d], beam_11MeV)
+        df_cp_mapped = map_smoothed_fitted_data_3d(data_cpvert, det, cpvert_tilt, cp_up, theta_n[d], phi_n[d], beam_11MeV)
+        df_b_mapped_mirror = map_smoothed_fitted_data_3d(data_bvert, det, bvert_tilt, np.asarray(((1,0,0), (0,1,0), (0,0,-1))), theta_n[d], phi_n[d], beam_11MeV)
+        df_cp_mapped_mirror = map_smoothed_fitted_data_3d(data_cpvert, det, cpvert_tilt, np.asarray(((-1,0,0), (0,0,-1), (0,1,0))), theta_n[d], phi_n[d], beam_11MeV)   
+
+        # convert to cartesian
+        theta_b = np.concatenate([df_b_mapped.theta.values, df_b_mapped_mirror.theta.values])
+        theta_cp = np.concatenate([df_cp_mapped.theta.values, df_cp_mapped_mirror.theta.values])
+        phi_b = np.concatenate([df_b_mapped.phi.values, df_b_mapped_mirror.phi.values])
+        phi_cp = np.concatenate([df_cp_mapped.phi.values, df_cp_mapped_mirror.phi.values])
+
+        angles_b = np.concatenate([df_b_mapped.angles.values, df_b_mapped_mirror.angles.values])
+        angles_cp = np.concatenate([df_cp_mapped.angles.values, df_cp_mapped_mirror.angles.values])
+        angles = np.concatenate((angles_b, angles_cp))
+
+        x_b, y_b, z_b = polar_to_cartesian(theta_b, phi_b, b_up, cp_up)
+        x_cp, y_cp, z_cp = polar_to_cartesian(theta_cp, phi_cp, cp_up, cp_up)
+
+        x = np.round(np.concatenate((x_b, x_cp)), 12)
+        y = np.round(np.concatenate((y_b, y_cp)), 12)
+        z = np.round(np.concatenate((z_b, z_cp)), 12)
+        ql = np.concatenate([df_b_mapped.ql.values, df_b_mapped_mirror.ql.values, df_cp_mapped.ql.values, df_cp_mapped_mirror.ql.values])
+      
+        ## remove repeated points
+        xyz = np.array(zip(x, y, z))
+        xyz_u, indices = np.unique(xyz, axis=0, return_index=True)
+        ql = ql[indices]
+        x, y, z = xyz_u.T
+
+        # convert to lambertian projection (from https://en.wikipedia.org/wiki/Lambert_azimuthal_equal-area_projection)
+        X, Y = [], []
+        for xi, yi, zi in zip(x, y, z):
+            Xi = np.sqrt(2/(1-zi))*xi
+            Yi = np.sqrt(2/(1-zi))*yi
+            if np.isnan(Xi) or np.isnan(Yi):
+                zi -= 0.000001
+                Xi = np.sqrt(2/(1-zi))*xi
+                Yi = np.sqrt(2/(1-zi))*yi    
+            if np.isinf(Xi) or np.isinf(Yi):
+                zi -= 0.000001
+                Xi = np.sqrt(2/(1-zi))*xi
+                Yi = np.sqrt(2/(1-zi))*yi  
+            X.append(Xi)
+            Y.append(Yi)
+        X = np.array(X)/max(X)
+        Y = np.array(Y)/max(Y)
+
+        #print np.mean(ql_uncert), np.std(ql_uncert)
+        grid_x, grid_y = np.mgrid[-1:1:1000j, -1:1:1000j]
+        #methods = ('nearest', 'linear', 'cubic')
+        methods = ('linear',)
+        plt.rcParams['axes.facecolor'] = 'grey'
+        f = 14
+        for method in methods:
+            interp = scipy.interpolate.griddata((X, Y), ql, (grid_x, grid_y), method=method)
+            #print max(ql), min(ql), max(ql)/min(ql)
+            plt.figure()
+            plt.imshow(interp.T, extent=(-1,1,-1,1), origin='lower', cmap='viridis', interpolation='none')
+            #plt.scatter(X, Y, c=ql, cmap='viridis')
+            # put avg uncert on colorbar
+            ## need to scale y from (0, 1) to (min(ql), max(ql))
+            avg_uncert = avg_uncerts[d]/(max(ql) - min(ql))
+            cbar = plt.colorbar()
+            cbar.ax.errorbar(0.5, 0.5, yerr=avg_uncert)
+            print '{:^6.3f} {:>6.3f} {:>6.3f}'.format(np.mean(ql), avg_uncerts[d], avg_uncert)
+            plt.text(-0.71, 0.0, 'a', color='r', fontsize=f)
+            plt.text(0.71, 0., 'a', color='r', fontsize=f)
+            plt.text(0, 0.0, 'c\'', color='r', fontsize=f)
+            plt.text(0, 0.713, 'b', color='r', fontsize=f)
+            plt.text(0, -0.713, 'b', color='r', fontsize=f)
+            plt.xticks([])
+            plt.yticks([])
+            plt.tight_layout()
+
+    plt.show()
+
 
 def main():
     cwd = os.getcwd()
@@ -2429,8 +2589,7 @@ def main():
 
     # cleans measured data
     if smooth_tilt:
-        smoothing_tilt(dets, fin, cwd, p_dir, print_max_ql=False, get_a_data=True, pulse_shape=False, 
-                    delayed=False, prompt=False, show_plots=False, save_plots=False, save_pickle=True)
+        smoothing_tilt(dets, fin, cwd, p_dir, pulse_shape=True, delayed=False, prompt=False, show_plots=True, save_plots=False, save_pickle=False)
 
     # comparison of ql for recoils along the a-axis
     if compare_a_axes:
@@ -2488,9 +2647,11 @@ def main():
     # plots smoothed data from smooth_tilt()
     sin_fits = ['bvert_11MeV_sin_params_smoothed.p', 'cpvert_11MeV_sin_params_smoothed.p', 'bvert_4MeV_sin_params_smoothed.p', 'cpvert_4MeV_sin_params_smoothed.p']                     
     if smoothed_fitted_heatmap_11:
-        plot_smoothed_fitted_heatmaps(sin_fits[0], sin_fits[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, multiplot=False, save_multiplot=False)
+        plot_smoothed_fitted_heatmaps(sin_fits[0], sin_fits[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, pulse_shape=True, 
+                                      beam_11MeV=True, multiplot=False, save_multiplot=False)
     if smoothed_fitted_heatmap_4:
-        plot_smoothed_fitted_heatmaps(sin_fits[2], sin_fits[3], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=False, multiplot=False, save_multiplot=False)
+        plot_smoothed_fitted_heatmaps(sin_fits[2], sin_fits[3], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, pulse_shape=True, 
+                                      beam_11MeV=False, multiplot=False, save_multiplot=False)
 
     ## polar interpolation
     if polar_plots:
@@ -2511,7 +2672,12 @@ def main():
         legendre_poly_fit(fin[0], fin[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, plot_pulse_shape=False, multiplot=False, save_multiplot=False)
 
     if lambertian_proj:
-        lambertian(fin[0], fin[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, plot_pulse_shape=False, multiplot=False, save_multiplot=False)
+        lambertian(fin[0], fin[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, pulse_shape=False)
+        lambertian(fin[2], fin[3], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=False, pulse_shape=False)
+
+    if lambertian_smoothed:
+        lambertian_smooth(sin_fits[0], sin_fits[1], (fin[0], fin[1]), dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, pulse_shape=False)
+        lambertian_smooth(sin_fits[2], sin_fits[3], (fin[2], fin[3]), dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=False, pulse_shape=False)
 
 if __name__ == '__main__':
     # check 3d scatter plots for both crystals
@@ -2534,7 +2700,7 @@ if __name__ == '__main__':
     adc_vs_cal = False
 
     # plot a, cp LO curves
-    acp_curves = True
+    acp_curves = False
 
     # plot heatmaps with data points
     heatmap_11 = False 
@@ -2569,5 +2735,6 @@ if __name__ == '__main__':
 
     # Lambertian projection
     lambertian_proj = False
+    lambertian_smoothed = True
 
     main()
