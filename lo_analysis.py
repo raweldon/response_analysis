@@ -2498,6 +2498,7 @@ def get_avg_lo_uncert(fin1, fin2, p_dir, dets, beam_11MeV, pulse_shape):
     uncerts = [(x + y)/2 for x, y in zip(uncert[:len(dets)], uncert[len(dets):])]
     mean_qls = [(x + y)/2 for x, y in zip(mean_ql[:len(dets)], mean_ql[len(dets):])]
     mean_pss = [(x + y)/2 for x, y in zip(mean_ps[:len(dets)], mean_ps[len(dets):])]
+    print mean_qls
     if pulse_shape:
         cal_unc = [c/q for c, q in zip(cal_unc, mean_qls)]
         print cal_unc
@@ -2743,8 +2744,8 @@ def main():
         legendre_poly_fit(fin[0], fin[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, plot_pulse_shape=False, multiplot=False, save_multiplot=False)
 
     if lambertian_proj:
-        lambertian(fin[0], fin[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, pulse_shape=True)
-        lambertian(fin[2], fin[3], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=False, pulse_shape=True)
+        lambertian(fin[0], fin[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, pulse_shape=False)
+        lambertian(fin[2], fin[3], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=False, pulse_shape=False)
 
     if lambertian_smoothed:
         lambertian_smooth(sin_fits[0], sin_fits[1], (fin[0], fin[1]), dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, pulse_shape=True)
@@ -2771,7 +2772,7 @@ if __name__ == '__main__':
     adc_vs_cal = False
 
     # plot a, cp LO curves
-    acp_curves = True
+    acp_curves = False
 
     # plot heatmaps with data points
     heatmap_11 = False 
@@ -2805,7 +2806,7 @@ if __name__ == '__main__':
     legendre_poly = False
 
     # Lambertian projection
-    lambertian_proj = False
+    lambertian_proj = True
     lambertian_smoothed = False
 
     main()
