@@ -130,4 +130,6 @@
     * updating uncertainties
     * new lambertian_smooth function with uncerts
 
+* 8/15/2019
+    * full accounting of LO uncert for smoothing_tilt and lambertian fit functions
           

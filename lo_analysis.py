@@ -297,8 +297,11 @@ def smoothing_tilt(dets, pickle_name, cwd, p_dir, pulse_shape, delayed, prompt, 
     for f in pickle_name:
         if '11' in f:
             beam_11MeV = True
+            # from /home/radians/raweldon/tunl.2018.1_analysis/stilbene_final/lo_calibration/uncert_gamma_cal.py 
+            cal_unc = [0.00792, 0.00540, 0.00285, 0.00155, 0.00271, 0.00372, 0.00375, 0.00275, 0.00156, 0.00278, 0.00540, 0.00800]
         else:
             beam_11MeV = False
+            cal_unc = [0.01920, 0.01502, 0.01013, 0.00541, 0.00176, 0.00116, 0.00116, 0.00185, 0.00552, 0.01025, 0.01506, 0.01935]
         if 'bvert' in f:
             max_ql = []
             tilts = [0, 45, -45, 30, -30, 15, -15]
@@ -310,11 +313,11 @@ def smoothing_tilt(dets, pickle_name, cwd, p_dir, pulse_shape, delayed, prompt, 
 
         if pulse_shape:
             print '\nANALYZING PULSE SHAPE DATA'
-            # pulse shape uncertainties, from daq2:/home/radians/raweldon/tunl.2018.1_analysis/peak_localization/pulse_shape_get_hotspots.py
+            # pulse shape uncertainties, from daq2:/home/radians/raweldon/tunl.2018.1_analysis/stilbene_final/peak_localization/pulse_shape_get_hotspots.py
             if beam_11MeV:
-                ps_unc = (0.0017, 0.0014, 0.0013, 0.0012, 0.0013, 0.0019, 0.0019, 0.0013, 0.0012, 0.0012, 0.0013, 0.0018)
+                ps_unc = [0.00175, 0.00135, 0.00125, 0.00126, 0.0014, 0.00198, 0.00195, 0.0014, 0.00124, 0.00123, 0.00134, 0.00177]
             else:
-                ps_unc = (0.0015, 0.0015, 0.0015, 0.0015,  0.002, 0.0036, 0.0036, 0.0021, 0.0016, 0.0015, 0.0015, 0.0015)
+                ps_unc = [0.00164, 0.00142, 0.00142, 0.00147, 0.0018, 0.00306, 0.0031, 0.00179, 0.00143, 0.00142, 0.00142, 0.0016]
         elif delayed:
             print '\nANALYZING QS'
         elif prompt:
@@ -325,12 +328,10 @@ def smoothing_tilt(dets, pickle_name, cwd, p_dir, pulse_shape, delayed, prompt, 
         fig_no = [1, 2, 3, 4, 5, 6, 6, 5, 4, 3, 2, 1]
         a_label = ['a-axis', '', 'a-axis', '', 'a-axis', '', 'a-axis', '', 'a-axis', '', 'a-axis', '', ]
         min_ql_label = ['expected min', '', 'expected min', '', 'expected min', '', 'expected min', '', 'expected min', '', 'expected min', '', ]
-        #color = ['r', 'r', 'r', 'r', 'r', 'r', 'b', 'b', 'b', 'b', 'b', 'b']
-        color = ['r', 'b', 'g', 'c', 'm', 'k', 'y']
+        color = cm.viridis(np.linspace(0, 1, len(tilts)))
         a_axis_dir = [20, 30, 40, 50, 60, 70, 110, 120, 130, 140, 150, 160] # angle for recoils along a-axis (relative)
         cp_b_axes_dir = [x + 90 for x in a_axis_dir[:6]] + [x - 90 for x in a_axis_dir[6:]] # angles for recoils along c' or b axes (only for tilt=0)
 
-        
         sin_params, a_axis_data, cp_b_axes_data = [], [], []
         sin_params.append(['tilt', 'det', 'a', 'b', 'phi'])
         a_axis_data.append(['crystal', 'energy', 'det', 'tilt', 'ql', 'abs_uncert', 'fit_ql', 'counts'])
@@ -385,7 +386,6 @@ def smoothing_tilt(dets, pickle_name, cwd, p_dir, pulse_shape, delayed, prompt, 
                 #
                 # smoothing and averaging 
                 #
-                plt.figure(fig_no[d] + 10, figsize=(10,8))
                 if d > 5:
                     continue
                 else:
@@ -397,8 +397,10 @@ def smoothing_tilt(dets, pickle_name, cwd, p_dir, pulse_shape, delayed, prompt, 
                     res = fit_tilt_data(data.values, angles, print_report=False)
                     pars = res.best_values
                     x_vals = np.linspace(0, 190, 1000)
+                    x_orig = np.linspace(0, 190, 1000)
                     x_vals_rad = np.deg2rad(x_vals)
                     y_vals = sin_func(x_vals_rad, pars['a'], pars['b'], pars['phi'])
+                    y_orig = y_vals
 
                     ## use to get scaling factor for smoothing
                     #if tilt == 0 and 'bvert' in f:
@@ -412,19 +414,23 @@ def smoothing_tilt(dets, pickle_name, cwd, p_dir, pulse_shape, delayed, prompt, 
                     if beam_11MeV:
                         if pulse_shape:
                             max_ql = [0.3211530198583945, 0.3310542105630364, 0.34502415458937197, 0.3687198259854635, 0.3996132774734128, 0.4287629902782434]
+                            lo_unc = [np.sqrt((cal_unc[d]*q)**2 + ps_unc[d]**2 + (0.005*q)**2) for q in data.values]
                         else:
                             max_ql = [5.361060691111871, 4.321438060046981, 3.087094177473607, 1.902, 0.9435, 0.3169] # calulcated directly above (uncomment, copy from output)
+                            lo_unc = [np.sqrt(cal_unc[d]**2 + u**2 + (0.005*q)**2) for u, q in zip(data_uncert.values, data.values)]
                     else:
                         if pulse_shape:
                             max_ql = [0.36916873449131526, 0.37724319306930687, 0.39375000000000004, 0.40695108495770493, 0.4193293885601578, 0.38900203665987776]
+                            lo_unc = [np.sqrt((cal_unc[d]*q)**2 + ps_unc[d]**2 + (0.005*q)**2) for q in data.values]
+
                         else:
                             max_ql = [1.6429, 1.3094, 0.9084, 0.5553, 0.2733, 0.1042]
-
+                            lo_unc = [np.sqrt(cal_unc[d]**2 + u**2 + (0.005*q)**2) for u, q in zip(data_uncert.values, data.values)]
 
                     c = max(y_vals)/max_ql[d]
-                    data = data/c
+                    smoothed_data = data/c
                     y_vals = y_vals/c
-                    res = fit_tilt_data(data.values, angles, print_report=False)
+                    res = fit_tilt_data(smoothed_data.values, angles, print_report=False)
                     pars = res.best_values
                     #print max_ql[d], max(y_vals), data.iloc[np.where(angles == a_axis_dir[d])].values
 
@@ -434,18 +440,19 @@ def smoothing_tilt(dets, pickle_name, cwd, p_dir, pulse_shape, delayed, prompt, 
                     x_vals -= diff
                     res = fit_tilt_data(y_vals, x_vals, print_report=False)
                     pars = res.best_values
-                    print y_vals[max_yidx], x_vals[max_yidx], a_axis_dir[d], diff
+                    #print y_vals[max_yidx], x_vals[max_yidx], a_axis_dir[d], diff
 
                     sin_params.append([tilt, det, pars['a'], pars['b'], pars['phi']])
 
                     if show_plots:
-                        plt.errorbar(angles, data, yerr=data_uncert.values, ecolor='black', markerfacecolor=color[tidx], fmt='o', 
+                        # smoothed data plots
+                        plt.figure(fig_no[d] + 10)
+                        plt.errorbar(angles, smoothed_data, yerr=lo_unc, ecolor='black', markerfacecolor=color[tidx], fmt='o', 
                                     markeredgecolor='k', markeredgewidth=1, markersize=10, capsize=1, label=str(tilt) + ' deg tilt')
                         plt.plot(x_vals, y_vals, '--', color=color[tidx])
                         # annotate
-                        for rot, ang, t in zip(det_df.rotation, angles, data):
+                        for rot, ang, t in zip(det_df.rotation, angles, smoothed_data):
                             plt.annotate( str(rot) + '$^{\circ}$', xy=(ang, t), xytext=(-3, 10), textcoords='offset points')
-
                                             
                         plt.xlim(-5, 200)
                         if pulse_shape:
@@ -453,7 +460,25 @@ def smoothing_tilt(dets, pickle_name, cwd, p_dir, pulse_shape, delayed, prompt, 
                         else:
                             plt.ylabel('light output (MeVee)')
                         plt.xlabel('rotation angle (degree)')
-                        plt.title(name)
+                        plt.title(det)
+                        plt.legend(fontsize=10)
+
+                        # original data plots
+                        plt.figure(fig_no[d])
+                        plt.errorbar(angles, data, yerr=lo_unc, ecolor='black', markerfacecolor=color[tidx], fmt='o', 
+                                    markeredgecolor='k', markeredgewidth=1, markersize=10, capsize=1, label=str(tilt) + ' deg tilt')
+                        plt.plot(x_orig, y_orig, '--', color=color[tidx])
+                        # annotate
+                        for rot, ang, t in zip(det_df.rotation, angles, data):
+                            plt.annotate( str(rot) + '$^{\circ}$', xy=(ang, t), xytext=(-3, 10), textcoords='offset points')
+                                            
+                        plt.xlim(-5, 200)
+                        if pulse_shape:
+                            plt.ylabel('pulse shape parameter')
+                        else:
+                            plt.ylabel('light output (MeVee)')
+                        plt.xlabel('rotation angle (degree)')
+                        plt.title(det)
                         plt.legend(fontsize=10)
                     
         if show_plots:
@@ -2328,16 +2353,18 @@ def lambertian(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, 
     ''' 2D lambertian projection of the 3D spherical data
         Interpolation currently performed with griddata built in methods (linear (current), cubic, nearest)
     '''
+    # ignore divide by zero warning
+    np.seterr(divide='ignore', invalid='ignore')
 
-    avg_uncerts, avg_qls = get_avg_lo_uncert(fin1, fin2, p_dir, dets, pulse_shape) 
+    avg_uncerts, avg_qls, abs_uncerts = get_avg_lo_uncert(fin1, fin2, p_dir, dets, beam_11MeV, pulse_shape) 
 
     data_bvert = pd_load(fin1, p_dir)
     data_bvert = split_filenames(data_bvert)
     data_cpvert = pd_load(fin2, p_dir)
     data_cpvert = split_filenames(data_cpvert)
 
+    print '\n det   angle   mean_ql  uncert   abs_unc rel_uncert'
     for d, det in enumerate(dets):       
-        print '\ndet_no =', det, 'theta_n =', theta_n[d]
         df_b_mapped = map_data_3d(data_bvert, det, bvert_tilt, b_up, theta_n[d], phi_n[d], beam_11MeV) 
         df_b_mapped_mirror = map_data_3d(data_bvert, det, bvert_tilt, np.asarray(((1,0,0), (0,1,0), (0,0,-1))), theta_n[d], phi_n[d], beam_11MeV)
         df_cp_mapped = map_data_3d(data_cpvert, det, cpvert_tilt, cp_up, theta_n[d], phi_n[d], beam_11MeV)
@@ -2395,17 +2422,34 @@ def lambertian(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, 
         for method in methods:
             if pulse_shape:
                 interp = scipy.interpolate.griddata((X, Y), ps, (grid_x, grid_y), method=method)
-                print max(ps), min(ps), max(ps)/min(ps)
+                #print max(ps), min(ps), max(ps)/min(ps)
+                plt.figure()
+                plt.imshow(interp.T, extent=(-1,1,-1,1), origin='lower', cmap='viridis', interpolation='none')
+                plt.scatter(X, Y, c=ps, cmap='viridis')
+                # put avg uncert on colorbar
+                ## need to scale y from (0, 1) to (min(ps), max(ps))
+                avg_uncert = avg_uncerts[d]/(max(ps) - min(ps))
+                abs_uncert = abs_uncerts[d]/(max(ps) - min(ps))
+                cbar = plt.colorbar()
+                cbar.ax.errorbar(0.5, 0.5, yerr=avg_uncert)
+                cbar.ax.errorbar(0.5, 0.5, yerr=abs_uncert, ecolor='r', elinewidth=1.5)
+                print '{:^5d} {:>6.1f} {:>8.3f} {:>8.3f} {:>8.3f} {:>8.3f}%'.format(det, theta_n[d], np.mean(ps), avg_uncerts[d], abs_uncerts[d], avg_uncerts[d]/np.mean(ps)*100)
+
             else:
                 interp = scipy.interpolate.griddata((X, Y), ql, (grid_x, grid_y), method=method)
-                print max(ql), min(ql), max(ql)/min(ql)
-            plt.figure()
-            plt.imshow(interp.T, extent=(-1,1,-1,1), origin='lower', cmap='viridis', interpolation='none')
-            plt.scatter(X, Y, c=ql, cmap='viridis')
-            avg_uncert = avg_uncerts[d]/(max(ql) - min(ql))
-            cbar = plt.colorbar()
-            cbar.ax.errorbar(0.5, 0.5, yerr=avg_uncert)
-            print '{:^6.3f} {:>6.3f} {:>6.3f}'.format(np.mean(ql), avg_uncerts[d], avg_uncert)
+                #print max(ql), min(ql), max(ql)/min(ql)
+                plt.figure()
+                plt.imshow(interp.T, extent=(-1,1,-1,1), origin='lower', cmap='viridis', interpolation='none')
+                plt.scatter(X, Y, c=ql, cmap='viridis')
+                # put avg uncert on colorbar
+                ## need to scale y from (0, 1) to (min(ql), max(ql))
+                avg_uncert = avg_uncerts[d]/(max(ql) - min(ql))
+                abs_uncert = abs_uncerts[d]/(max(ql) - min(ql))
+                cbar = plt.colorbar()
+                cbar.ax.errorbar(0.5, 0.5, yerr=avg_uncert)
+                cbar.ax.errorbar(0.5, 0.5, yerr=abs_uncert, ecolor='r', elinewidth=1.5)
+                print '{:^5d} {:>6.1f} {:>8.3f} {:>8.3f} {:>8.3f} {:>8.3f}%'.format(det, theta_n[d], np.mean(ql), avg_uncerts[d], abs_uncerts[d], avg_uncerts[d]/np.mean(ql)*100)
+            
             plt.text(-0.71, 0.0, 'a', color='r', fontsize=f)
             plt.text(0.71, 0., 'a', color='r', fontsize=f)
             plt.text(0, 0.0, 'c\'', color='r', fontsize=f)
@@ -2414,22 +2458,36 @@ def lambertian(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, 
             plt.xticks([])
             plt.yticks([])
             plt.tight_layout()
+
     plt.show()
 
-def get_avg_lo_uncert(fin1, fin2, p_dir, dets, pulse_shape):
+def get_avg_lo_uncert(fin1, fin2, p_dir, dets, beam_11MeV, pulse_shape):
 
     data_bvert = pd_load(fin1, p_dir)
     data_bvert = split_filenames(data_bvert)
     data_cpvert = pd_load(fin2, p_dir)
     data_cpvert = split_filenames(data_cpvert)
 
-    uncert, mean_ql = [], []
+    if beam_11MeV:
+        # ps_unc - statistical uncertainty of 1-qs/ql (used cpvert uncert - worse than bvert)
+        # from /home/radians/raweldon/tunl.2018.1_analysis/stilbene_final/peak_localization/pulse_shape_get_hotspots.py  
+        ps_unc = [0.00175, 0.00135, 0.00125, 0.00126, 0.0014, 0.00198, 0.00195, 0.0014, 0.00124, 0.00123, 0.00134, 0.00177]
+        # cal_unc - uncert due to change in calibration over experiment (used cpvert uncert - worse than bvert)
+        # from /home/radians/raweldon/tunl.2018.1_analysis/stilbene_final/lo_calibration/uncert_gamma_cal.py 
+        cal_unc = [0.00792, 0.00540, 0.00285, 0.00155, 0.00271, 0.00372, 0.00375, 0.00275, 0.00156, 0.00278, 0.00540, 0.00800]
+    else:
+        ps_unc = [0.00164, 0.00142, 0.00142, 0.00147, 0.0018, 0.00306, 0.0031, 0.00179, 0.00143, 0.00142, 0.00142, 0.0016]
+        cal_unc = [0.01920, 0.01502, 0.01013, 0.00541, 0.00176, 0.00116, 0.00116, 0.00185, 0.00552, 0.01025, 0.01506, 0.01935]
+
+    uncert, mean_ql, mean_ps = [], [], []
     for data in (data_bvert, data_cpvert):
         for d, det in enumerate(dets):
             if pulse_shape:
                 det_df = data.loc[(data.det_no == str(det))]
                 #print det, det_df.ql_abs_uncert.mean(), det_df.ql_abs_uncert.max(), det_df.ql_abs_uncert.median()
-                uncert.append(1 - det_df.qs_abs_uncert.mean()/det_df.ql_abs_uncert.mean())
+                uncert.append(ps_unc[d])
+                #mean_ql.append(1 - (det_df.qs_mean.mean()/det_df.ql_mean.mean()))
+                mean_ps.append(det_df.qs_mean.mean()/det_df.ql_mean.mean())
                 mean_ql.append(det_df.ql_mean.mean())
             else:
                 det_df = data.loc[(data.det_no == str(det))]
@@ -2439,10 +2497,19 @@ def get_avg_lo_uncert(fin1, fin2, p_dir, dets, pulse_shape):
     
     uncerts = [(x + y)/2 for x, y in zip(uncert[:len(dets)], uncert[len(dets):])]
     mean_qls = [(x + y)/2 for x, y in zip(mean_ql[:len(dets)], mean_ql[len(dets):])]
-    cal_uncerts = [0.01*q + u for q, u in zip(mean_qls, uncerts)]
-    #for i, j, k in zip(uncerts, cal_uncerts, mean_qls):
-    #    print i, j, k, j/k*100, '%'
-    return cal_uncerts, mean_qls
+    mean_pss = [(x + y)/2 for x, y in zip(mean_ps[:len(dets)], mean_ps[len(dets):])]
+    if pulse_shape:
+        cal_unc = [c/q for c, q in zip(cal_unc, mean_qls)]
+        print cal_unc
+        cal_uncerts = [np.sqrt((c*q)**2 + u**2 + (0.005*q)**2) for c, q, u in zip(cal_unc, mean_pss, uncerts)]
+        mean_pss= [1 - q for q in mean_qls]
+        return cal_uncerts, mean_pss, uncerts
+
+    else:
+        cal_uncerts = [np.sqrt(c**2 + u**2 + (0.005*q)**2) for c, q, u in zip(cal_unc, mean_qls, uncerts)]
+        #for i, j, k in zip(uncerts, cal_uncerts, mean_qls):
+        #    print i, j, k, j/k*100, '%'
+        return cal_uncerts, mean_qls, uncerts
 
 def lambertian_smooth(fin1, fin2, fin, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV, pulse_shape):
     ''' 2D lambertian projection of the 3D spherical data
@@ -2472,7 +2539,10 @@ def lambertian_smooth(fin1, fin2, fin, dets, bvert_tilt, cpvert_tilt, b_up, cp_u
         df = pd.DataFrame(data=d)
         return df
 
-    avg_uncerts, avg_qls = get_avg_lo_uncert(fin[0], fin[1], p_dir, dets, pulse_shape) 
+    # ignore divide by zero warning
+    np.seterr(divide='ignore', invalid='ignore')
+ 
+    avg_uncerts, avg_qls, abs_uncerts = get_avg_lo_uncert(fin[0], fin[1], p_dir, dets, beam_11MeV, pulse_shape) 
     if pulse_shape:
         f1 = fin1.split('.')
         fin1 = f1[0] + '_ps.' + f1[1]
@@ -2482,10 +2552,10 @@ def lambertian_smooth(fin1, fin2, fin, dets, bvert_tilt, cpvert_tilt, b_up, cp_u
     data_bvert = pd_load(fin1, p_dir)
     data_cpvert = pd_load(fin2, p_dir)
     
+    print '\n det   angle   mean_ql  uncert   abs_unc rel_uncert'
     for d, det in enumerate(dets):
         if d > 5:
             continue
-        print 'det_no =', det, 'theta_n =', theta_n[d]
         df_b_mapped = map_smoothed_fitted_data_3d(data_bvert, det, bvert_tilt, b_up, theta_n[d], phi_n[d], beam_11MeV)
         df_cp_mapped = map_smoothed_fitted_data_3d(data_cpvert, det, cpvert_tilt, cp_up, theta_n[d], phi_n[d], beam_11MeV)
         df_b_mapped_mirror = map_smoothed_fitted_data_3d(data_bvert, det, bvert_tilt, np.asarray(((1,0,0), (0,1,0), (0,0,-1))), theta_n[d], phi_n[d], beam_11MeV)
@@ -2548,9 +2618,11 @@ def lambertian_smooth(fin1, fin2, fin, dets, bvert_tilt, cpvert_tilt, b_up, cp_u
             # put avg uncert on colorbar
             ## need to scale y from (0, 1) to (min(ql), max(ql))
             avg_uncert = avg_uncerts[d]/(max(ql) - min(ql))
+            abs_uncert = abs_uncerts[d]/(max(ql) - min(ql))
             cbar = plt.colorbar()
             cbar.ax.errorbar(0.5, 0.5, yerr=avg_uncert)
-            print '{:^6.3f} {:>6.3f} {:>6.3f}'.format(np.mean(ql), avg_uncerts[d], avg_uncert)
+            cbar.ax.errorbar(0.5, 0.5, yerr=abs_uncert, ecolor='r', elinewidth=1.5)
+            print '{:^5d} {:>6.1f} {:>8.3f} {:>8.3f} {:>8.3f} {:>8.3f}%'.format(det, theta_n[d], np.mean(ql), avg_uncerts[d], abs_uncerts[d], avg_uncerts[d]/np.mean(ql)*100)
             plt.text(-0.71, 0.0, 'a', color='r', fontsize=f)
             plt.text(0.71, 0., 'a', color='r', fontsize=f)
             plt.text(0, 0.0, 'c\'', color='r', fontsize=f)
@@ -2561,7 +2633,6 @@ def lambertian_smooth(fin1, fin2, fin, dets, bvert_tilt, cpvert_tilt, b_up, cp_u
             plt.tight_layout()
 
     plt.show()
-
 
 def main():
     cwd = os.getcwd()
@@ -2589,7 +2660,7 @@ def main():
 
     # cleans measured data
     if smooth_tilt:
-        smoothing_tilt(dets, fin, cwd, p_dir, pulse_shape=True, delayed=False, prompt=False, show_plots=True, save_plots=False, save_pickle=False)
+        smoothing_tilt(dets, fin, cwd, p_dir, pulse_shape=False, delayed=False, prompt=False, show_plots=True, save_plots=False, save_pickle=False)
 
     # comparison of ql for recoils along the a-axis
     if compare_a_axes:
@@ -2672,12 +2743,12 @@ def main():
         legendre_poly_fit(fin[0], fin[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, plot_pulse_shape=False, multiplot=False, save_multiplot=False)
 
     if lambertian_proj:
-        lambertian(fin[0], fin[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, pulse_shape=False)
-        lambertian(fin[2], fin[3], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=False, pulse_shape=False)
+        lambertian(fin[0], fin[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, pulse_shape=True)
+        lambertian(fin[2], fin[3], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=False, pulse_shape=True)
 
     if lambertian_smoothed:
-        lambertian_smooth(sin_fits[0], sin_fits[1], (fin[0], fin[1]), dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, pulse_shape=False)
-        lambertian_smooth(sin_fits[2], sin_fits[3], (fin[2], fin[3]), dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=False, pulse_shape=False)
+        lambertian_smooth(sin_fits[0], sin_fits[1], (fin[0], fin[1]), dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, pulse_shape=True)
+        lambertian_smooth(sin_fits[2], sin_fits[3], (fin[2], fin[3]), dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=False, pulse_shape=True)
 
 if __name__ == '__main__':
     # check 3d scatter plots for both crystals
@@ -2700,7 +2771,7 @@ if __name__ == '__main__':
     adc_vs_cal = False
 
     # plot a, cp LO curves
-    acp_curves = False
+    acp_curves = True
 
     # plot heatmaps with data points
     heatmap_11 = False 
@@ -2735,6 +2806,6 @@ if __name__ == '__main__':
 
     # Lambertian projection
     lambertian_proj = False
-    lambertian_smoothed = True
+    lambertian_smoothed = False
 
     main()
