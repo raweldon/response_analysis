@@ -132,4 +132,5 @@
 
 * 8/15/2019
     * full accounting of LO uncert for smoothing_tilt and lambertian fit functions
+    * uncerts added to ratio and LO curves functions
           
