@@ -337,6 +337,7 @@ def smoothing_tilt(dets, pickle_name, cwd, p_dir, pulse_shape, delayed, prompt, 
         sin_params.append(['tilt', 'det', 'a', 'b', 'phi'])
         a_axis_data.append(['crystal', 'energy', 'det', 'tilt', 'ql', 'abs_uncert', 'fit_ql', 'counts'])
         for tidx, tilt in enumerate(tilts):
+            print tilt
             tilt_df = det_data.loc[(det_data.tilt == str(tilt))]
 
             if show_plots:
@@ -447,41 +448,58 @@ def smoothing_tilt(dets, pickle_name, cwd, p_dir, pulse_shape, delayed, prompt, 
 
                     if show_plots:
                         # smoothed data plots
-                        plt.figure(fig_no[d] + 10)
+                        plt.figure(fig_no[d] + 10, figsize=(16,8))
                         plt.errorbar(angles, smoothed_data, yerr=lo_unc, ecolor='black', markerfacecolor=color[tidx], fmt='o', 
                                     markeredgecolor='k', markeredgewidth=1, markersize=10, capsize=1, label=str(tilt) + ' deg tilt')
                         plt.plot(x_vals, y_vals, '--', color=color[tidx])
                         # annotate
-                        for rot, ang, t in zip(det_df.rotation, angles, smoothed_data):
-                            plt.annotate( str(rot) + '$^{\circ}$', xy=(ang, t), xytext=(-3, 10), textcoords='offset points')
+                        if not save_plots:
+                            for rot, ang, t in zip(det_df.rotation, angles, smoothed_data):
+                                plt.annotate( str(rot) + '$^{\circ}$', xy=(ang, t), xytext=(-3, 10), textcoords='offset points')
                                             
                         plt.xlim(-5, 200)
                         if pulse_shape:
-                            plt.ylabel('pulse shape parameter')
+                            plt.ylabel('Pulse shape parameter', fontsize=16)
                         else:
-                            plt.ylabel('light output (MeVee)')
-                        plt.xlabel('rotation angle (degree)')
-                        plt.title(det)
-                        plt.legend(fontsize=10)
+                            plt.ylabel('Light output (MeVee)', fontsize=16)
+                        plt.xlabel('Rotation angle (degree)', fontsize=16)
+                        #plt.title(det)
+                        plt.legend(loc=3, fontsize=12)
+                        plt.tight_layout()
+
+                        if tilt == -15 and save_plots:
+                            if pulse_shape:
+                                plt.savefig(cwd + '/figures/tilt_plots/pulse_shape/' + name + '_pulse_shape_smooth.png')
+                            else:
+                                plt.savefig(cwd + '/figures/tilt_plots/' + name + '_smooth.png', dpi=500)
+                                print 'plots saved to /figures/tilt_plots/' + name + '_smooth.png'
 
                         # original data plots
-                        plt.figure(fig_no[d])
+                        plt.figure(fig_no[d], figsize=(16,8))
                         plt.errorbar(angles, data, yerr=lo_unc, ecolor='black', markerfacecolor=color[tidx], fmt='o', 
                                     markeredgecolor='k', markeredgewidth=1, markersize=10, capsize=1, label=str(tilt) + ' deg tilt')
                         plt.plot(x_orig, y_orig, '--', color=color[tidx])
                         # annotate
-                        for rot, ang, t in zip(det_df.rotation, angles, data):
-                            plt.annotate( str(rot) + '$^{\circ}$', xy=(ang, t), xytext=(-3, 10), textcoords='offset points')
+                        if not save_plots:
+                            for rot, ang, t in zip(det_df.rotation, angles, data):
+                                plt.annotate( str(rot) + '$^{\circ}$', xy=(ang, t), xytext=(-3, 10), textcoords='offset points')
                                             
                         plt.xlim(-5, 200)
                         if pulse_shape:
-                            plt.ylabel('pulse shape parameter')
+                            plt.ylabel('Pulse shape parameter', fontsize=16)
                         else:
-                            plt.ylabel('light output (MeVee)')
-                        plt.xlabel('rotation angle (degree)')
-                        plt.title(det)
-                        plt.legend(fontsize=10)
+                            plt.ylabel('Light output (MeVee)', fontsize=16)
+                        plt.xlabel('Rotation angle (degree)', fontsize=16)
+                        #plt.title(det)
+                        plt.legend(loc=3, fontsize=12)
+                        plt.tight_layout()
                     
+                        if tilt == -15 and save_plots:
+                            if pulse_shape:
+                                plt.savefig(cwd + '/figures/tilt_plots/pulse_shape/' + name + '_pulse_shape.png', dpi=500)
+                            else:
+                                plt.savefig(cwd + '/figures/tilt_plots/' + name + '.png', dpi=500)
+                                print 'plots saved to /figures/tilt_plots/' + name + '.png'
         if show_plots:
             plt.show()
 
@@ -664,7 +682,7 @@ def heatmap_multiplot(x, y, z, data, theta_n, d, cwd, save_multiplot, beam_11MeV
         max_idx = np.argmax(data)
         print ' max = ', data[max_idx]
         for i, (az, el) in enumerate(zip(azimuth, elevation)):
-            fig = mlab.figure(size=(400*2, 350*2)) 
+            fig = mlab.figure(size=(400*4, 350*4)) 
             pts = mlab.points3d(x, y, z, data, colormap='viridis', scale_mode='none', scale_factor=0.03)
             if fitted:
                 mlab.points3d(x[max_idx], y[max_idx], z[max_idx], data[max_idx], color=(1,0,0), scale_mode='none', scale_factor=0.03)
@@ -676,8 +694,8 @@ def heatmap_multiplot(x, y, z, data, theta_n, d, cwd, save_multiplot, beam_11MeV
             mlab.view(azimuth=az, elevation=el, distance=7.5, figure=fig)
             if save_multiplot:
                 print theta_n[d], names[i]
-                mlab.savefig(cwd + '/' + names[i] + '.png')
-                print 'saved to' + cwd + '/' + names[i] + '.png'
+                mlab.savefig(cwd + names[i] + '.png')
+                print 'saved to ' + cwd + names[i] + '.png'
                 mlab.clf()
                 mlab.close()      
 
@@ -756,9 +774,9 @@ def plot_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_
         # points3d with delaunay filter - works best!!
         ## use for nice looking plots
         if multiplot:
-            heatmap_multiplot(x, y, z, ql, theta_n, d, cwd + '/figures/3d_lo', save_multiplot, beam_11MeV, fitted=False)
+            heatmap_multiplot(x, y, z, ql, theta_n, d, cwd + '/figures/3d_lo/', save_multiplot, beam_11MeV, fitted=False)
             if plot_pulse_shape:
-                heatmap_multiplot(x, y, z, ps, theta_n, d, cwd + '/figures/3d_pulse_shape', save_multiplot, beam_11MeV, fitted=False)
+                heatmap_multiplot(x, y, z, ps, theta_n, d, cwd + '/figures/3d_pulse_shape/', save_multiplot, beam_11MeV, fitted=False)
             if not save_multiplot:
                 mlab.show()
 
@@ -1007,7 +1025,7 @@ def plot_smoothed_fitted_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_u
         phi = np.array(phi)  
 
         if multiplot:
-            heatmap_multiplot(x, y, z, ql, theta_n, d, cwd, save_multiplot, beam_11MeV, fitted=True)
+            heatmap_multiplot(x, y, z, ql, theta_n, d, cwd + '/figures/smoothed', save_multiplot, beam_11MeV, fitted=False)
             if save_multiplot:
                 continue
             mlab.show()
@@ -1147,7 +1165,7 @@ def compare_a_axis_recoils(fin, dets, cwd, p_dir, plot_by_det, save_plots):
 
     plt.show()
 
-def plot_ratios(fin, dets, cwd, p_dir, pulse_shape, plot_fit_ratio, bl_only):
+def plot_ratios(fin, dets, cwd, p_dir, pulse_shape, plot_fit_ratio, bl_only, save_plots):
     ''' Plots a/c' and a/b ql or pulse shape ratios
         Set pulse_shape=True for pulse shape ratios
         Uses tilt_check function to get data from dataframes
@@ -1177,12 +1195,15 @@ def plot_ratios(fin, dets, cwd, p_dir, pulse_shape, plot_fit_ratio, bl_only):
 
     for i, f in enumerate(fin):
         label_fit = ['', '', '', 'fit ratios']
-        label_smooth = ['', '', '', 'smooth fit ratios']
-        if bl_only:
-            label = ['BL L$_a$/L$_c\'$', 'BL L$_a$/L$_b$', '', '']
-        else:
-            label = ['L$_a$/L$_c\'$', 'L$_a$/L$_b$', '', '']
-        label_pat = ['', '', '', 'Schuster ratios']
+        label_smooth = ['', '', 'Smoothed data', '']
+        label_sch = ['', '', 'Schuster and Brubaker', '']
+        label_bj = ['', '', 'Brooks and Jones', '']
+        #if bl_only:
+        #    label = ['BL L$_a$/L$_{c\'}$', 'BL L$_a$/L$_b$', '', '']
+        #else:
+        #    label = ['L$_a$/L$_{c\'}$', 'L$_a$/L$_b$', '', '']
+        label = ['L$_a$/L$_{c\'}$ measured data', 'L$_a$/L$_b$ measured data', '', '']
+
         if '11' in f:
             beam_11MeV = True
             angles = [70, 60, 50, 40, 30, 20, 20, 30, 40, 50, 60, 70]
@@ -1274,51 +1295,79 @@ def plot_ratios(fin, dets, cwd, p_dir, pulse_shape, plot_fit_ratio, bl_only):
                 else:
                     continue
 
+        ms = 10
         if pulse_shape:
-            plt.figure(0)
+            # dont plot a/b ps ratio
+            if i==1 or i==3:
+                continue
+
+            plt.figure(0, figsize=(12,9))
             # plot measured a/cp and a/b ratios 
             plt.errorbar(p_erg, ratio, yerr=uncert, ecolor='black', markerfacecolor='None', fmt=shape, 
-                         markeredgecolor=color, markeredgewidth=1, markersize=10, capsize=1, label=label[i])
+                         markeredgecolor=color, markeredgewidth=1, markersize=ms, capsize=1, label=label[i])
             # schuster ratios 2.5
-            pat_ratios = [1.071, 1.100, 1.078, 1.066, 1.034, 1.058, 1.039, 1.048]     
-            pat_ergs = [14.1, 14.1, 14.1, 14.1, 2.5, 2.5, 2.5, 2.5]        
-            plt.errorbar(pat_ergs, pat_ratios, ecolor='black', markerfacecolor='None', fmt='x', 
-                         markeredgecolor='k', markeredgewidth=1, markersize=7, capsize=1, label=label_pat[i])           
+            pat_ratios = [np.mean((1.071, 1.100, 1.078, 1.066)), np.mean((1.034, 1.058, 1.039, 1.048))] # cube a, cube b, rect, melt     
+            #pat_uncs = [np.sqrt(0.001**2 + 0.001**2 + 0.001**2 + 0.001**2)/4, np.sqrt(0.005**2 + 0.007**2 + 0.005**2 + 0.003**2)/4]
+            pat_uncs = [0.001, 0.007]
+            pat_ergs = [14.1, 2.5]        
+            plt.errorbar(pat_ergs, pat_ratios, yerr=pat_uncs, ecolor='black', markerfacecolor='None', fmt='<', 
+                         markeredgecolor='k', markeredgewidth=1, markersize=ms, capsize=1, label=label_sch[i])           
 
             # plot smoothed ratios
             smoothed_ratio = get_smoothed_data(sin_fits[i], dets, pulse_shape=pulse_shape)
             plt.errorbar(p_erg[:6], smoothed_ratio, ecolor='black', markerfacecolor='None', fmt='s', 
-            markeredgecolor=color, markeredgewidth=1, markersize=10, capsize=1, label=label_smooth[i])
+            markeredgecolor='g', markeredgewidth=1, markersize=ms, capsize=1, label=label_smooth[i])
 
             # plot fitted data
             if plot_fit_ratio:
                 plt.errorbar(p_erg, fit_ratio, ecolor='black', markerfacecolor='None', fmt='s', 
-                             markeredgecolor='g', markeredgewidth=1, markersize=10, capsize=1, label=label_fit[i])
+                             markeredgecolor='g', markeredgewidth=1, markersize=ms, capsize=1, label=label_fit[i])
             xmin, xmax = plt.xlim(0, 14.5)
             plt.plot(np.linspace(xmin, xmax, 10), [1.0]*10, 'k--')            
-            plt.ylabel('psd parameter ratio')
-            plt.xlabel('proton recoil energy (MeV)')
-            plt.ylim(0.91, 1.12)
-            plt.legend(loc=4)
+            plt.ylabel('Pulse shape parameter ratio', fontsize=16)
+            plt.xlabel('proton recoil energy (MeV)', fontsize=16)
+            plt.ylim(0.97, 1.09)
+            plt.legend(loc=4, fontsize=16)
+            if save_plots:
+                plt.savefig(cwd + '/figures/pulse_shape_ratios.png', dpi=500)
         else:
-            plt.figure(0)
+            plt.figure(0, figsize=(12,9))
             # plot measured a/cp and a/b ratios 
             plt.errorbar(p_erg, ratio, yerr=uncert, ecolor='black', markerfacecolor='None', fmt=shape, 
-                         markeredgecolor=color, markeredgewidth=1, markersize=10, capsize=1, label=label[i])
+                         markeredgecolor=color, markeredgewidth=1, markersize=ms, capsize=1, label=label[i])
             # plot fitted data
             if plot_fit_ratio:
                 plt.errorbar(p_erg, fit_ratio, ecolor='black', markerfacecolor='None', fmt='s', 
-                             markeredgecolor='g', markeredgewidth=1, markersize=10, capsize=1, label=label_fit[i])
+                             markeredgecolor='g', markeredgewidth=1, markersize=ms, capsize=1, label=label_fit[i])
             # plot smoothed ratios
             smoothed_ratio = get_smoothed_data(sin_fits[i], dets, pulse_shape=pulse_shape)
             plt.errorbar(p_erg[:6], smoothed_ratio, ecolor='black', markerfacecolor='None', fmt='s', 
-            markeredgecolor='g', markeredgewidth=1, markersize=10, capsize=1, label=label_smooth[i])
+            markeredgecolor='g', markeredgewidth=1, markersize=ms, capsize=1, label=label_smooth[i])
 
-            xmin, xmax = plt.xlim(0, 11)
+            # plot schuster and Brooks data
+            schuster_2 = [1.401, 1.468, 1.365, 1.327] # melt, cube a, cube b, rect
+            schuster_unc_2 = (0.055, 0.05, 0.039, 0.026)
+            schuster_14 = [1.187, 1.2, 1.191, 1.191]
+            schuster_unc_14 = (0.005, 0.007, 0.008, 0.004)
+            schuster_ratio = [np.mean(schuster_2), np.mean(schuster_14)]
+            schuster_error = [np.sqrt(0.055**2 + 0.05**2 + 0.039**2 + 0.026**2)/4, np.sqrt(0.005**2 + 0.007**2 + 0.008**2 + 0.004**2)/4]
+            schuster_ep = [2.5, 14.1] # melt, cube a, cube b, rect
+
+            #schuster_ratio = schuster_2 + schuster_14
+            #schuster_error= schuster_unc_2 + schuster_unc_14
+            #schuster_ep = (2.5, 2.5, 2.5, 14.1, 14.1, 14.1)
+            #schuster_ep = (2.5, 2.5, 14.1, 14.1)
+
+            plt.errorbar([8.0, 21.6], [1.2472, 1.0942], ecolor='black', fmt='>', mfc='none', mec='k', markersize=ms, label=label_bj[i]) #Brooks
+            plt.errorbar(schuster_ep, schuster_ratio, yerr=schuster_error, ecolor='black', fmt='<', mfc='none', mec='k', markersize=ms, label=label_sch[i])
+
+            xmin, xmax = plt.xlim(0, 15)
             plt.plot(np.linspace(xmin, xmax, 10), [1.0]*10, 'k--')
-            plt.ylabel('light output ratio')
-            plt.legend()
-            plt.xlabel('proton recoil energy (MeV)')     
+            plt.ylabel('Light output ratio', fontsize=16)
+            plt.legend(fontsize=16)
+            plt.xlabel('Proton recoil energy (MeV)', fontsize=16)   
+            if save_plots:
+                plt.savefig(cwd + '/figures/lo_ratios.png', dpi=500)
         
     plt.show()
 
@@ -2585,7 +2634,7 @@ def get_avg_lo_uncert(fin1, fin2, p_dir, dets, beam_11MeV, pulse_shape):
         #    print i, j, k, j/k*100, '%'
         return cal_uncerts, mean_qls, uncerts
 
-def lambertian_smooth(fin1, fin2, fin, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV, pulse_shape):
+def lambertian_smooth(fin1, fin2, fin, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV, pulse_shape, save_plot):
     ''' 2D lambertian projection of the 3D spherical data
         Interpolation currently performed with griddata built in methods (linear (current), cubic, nearest)
     '''
@@ -2694,8 +2743,11 @@ def lambertian_smooth(fin1, fin2, fin, dets, bvert_tilt, cpvert_tilt, b_up, cp_u
             avg_uncert = avg_uncerts[d]/(max(ql) - min(ql))
             abs_uncert = abs_uncerts[d]/(max(ql) - min(ql))
             cbar = plt.colorbar()
-            cbar.ax.errorbar(0.5, 0.5, yerr=avg_uncert)
-            cbar.ax.errorbar(0.5, 0.5, yerr=abs_uncert, ecolor='r', elinewidth=1.5)
+            if save_plot:
+                cbar.ax.errorbar(0.5, 0.5, yerr=avg_uncert, ecolor='k', elinewidth=2, capsize=4, capthick=2)
+            else:
+                cbar.ax.errorbar(0.5, 0.5, yerr=avg_uncert, ecolor='w', elinewidth=2, capsize=4, capthick=2)
+                cbar.ax.errorbar(0.5, 0.5, yerr=abs_uncert, ecolor='k', elinewidth=2, capsize=4, capthick=2)
             print '{:^5d} {:>6.1f} {:>8.3f} {:>8.3f} {:>8.3f} {:>8.3f}%'.format(det, theta_n[d], np.mean(ql), avg_uncerts[d], abs_uncerts[d], avg_uncerts[d]/np.mean(ql)*100)
             plt.text(-0.71, 0.0, 'a', color='r', fontsize=f)
             plt.text(0.71, 0., 'a', color='r', fontsize=f)
@@ -2705,7 +2757,17 @@ def lambertian_smooth(fin1, fin2, fin, dets, bvert_tilt, cpvert_tilt, b_up, cp_u
             plt.xticks([])
             plt.yticks([])
             plt.tight_layout()
-
+            if save_plot:
+                if beam_11MeV:
+                    if pulse_shape:
+                        plt.savefig(cwd + '/figures/lambert/det' + str(det) + '_lambert_pulse_shape_11MeV.png')
+                    else:
+                        plt.savefig(cwd + '/figures/lambert/det' + str(det) + '_lambert_lo_11MeV.png')
+                else:
+                    if pulse_shape:
+                        plt.savefig(cwd + '/figures/lambert/det' + str(det) + '_lambert_pulse_shape_4MeV.png')
+                    else:
+                        plt.savefig(cwd + '/figures/lambert/det' + str(det) + '_lambert_lo_4MeV.png')
     plt.show()
 
 def main():
@@ -2734,7 +2796,7 @@ def main():
 
     # cleans measured data
     if smooth_tilt:
-        smoothing_tilt(dets, fin, cwd, p_dir, pulse_shape=False, delayed=False, prompt=False, show_plots=True, save_plots=False, save_pickle=False)
+        smoothing_tilt(dets, fin, cwd, p_dir, pulse_shape=False, delayed=False, prompt=False, show_plots=True, save_plots=True, save_pickle=False)
 
     # comparison of ql for recoils along the a-axis
     if compare_a_axes:
@@ -2742,7 +2804,7 @@ def main():
 
     # plot ratios
     if ratios_plot:
-        plot_ratios(fin, dets, cwd, p_dir, pulse_shape=False, plot_fit_ratio=False, bl_only=True)
+        plot_ratios(fin, dets, cwd, p_dir, pulse_shape=True, plot_fit_ratio=False, bl_only=True, save_plots=True)
 
     if adc_vs_cal:
         adc_vs_cal_ratios(fin, dets, cwd, p_dir, plot_fit_ratio=True)
@@ -2784,7 +2846,7 @@ def main():
     ## heat maps with data points
     if avg_heatmap_11:
         plot_avg_heatmaps(fin[0], fin[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, 
-                      plot_pulse_shape=True, multiplot=False, save_multiplot=False, show_delaunay=False)
+                      plot_pulse_shape=False, multiplot=False, save_multiplot=False, show_delaunay=False)
     if avg_heatmap_4:
         plot_avg_heatmaps(fin[2], fin[3], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=False, 
                       plot_pulse_shape=False, multiplot=False, save_multiplot=False, show_delaunay=False)
@@ -2792,10 +2854,10 @@ def main():
     # plots smoothed data from smooth_tilt()
     sin_fits = ['bvert_11MeV_sin_params_smoothed.p', 'cpvert_11MeV_sin_params_smoothed.p', 'bvert_4MeV_sin_params_smoothed.p', 'cpvert_4MeV_sin_params_smoothed.p']                     
     if smoothed_fitted_heatmap_11:
-        plot_smoothed_fitted_heatmaps(sin_fits[0], sin_fits[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, pulse_shape=True, 
+        plot_smoothed_fitted_heatmaps(sin_fits[0], sin_fits[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, pulse_shape=False, 
                                       beam_11MeV=True, multiplot=False, save_multiplot=False)
     if smoothed_fitted_heatmap_4:
-        plot_smoothed_fitted_heatmaps(sin_fits[2], sin_fits[3], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, pulse_shape=True, 
+        plot_smoothed_fitted_heatmaps(sin_fits[2], sin_fits[3], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, pulse_shape=False, 
                                       beam_11MeV=False, multiplot=False, save_multiplot=False)
 
     ## polar interpolation
@@ -2821,8 +2883,8 @@ def main():
         lambertian(fin[2], fin[3], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=False, pulse_shape=False)
 
     if lambertian_smoothed:
-        lambertian_smooth(sin_fits[0], sin_fits[1], (fin[0], fin[1]), dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, pulse_shape=True)
-        lambertian_smooth(sin_fits[2], sin_fits[3], (fin[2], fin[3]), dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=False, pulse_shape=True)
+        lambertian_smooth(sin_fits[0], sin_fits[1], (fin[0], fin[1]), dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, pulse_shape=True, save_plot=True)
+        lambertian_smooth(sin_fits[2], sin_fits[3], (fin[2], fin[3]), dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=False, pulse_shape=True, save_plot=True)
 
 if __name__ == '__main__':
     # check 3d scatter plots for both crystals
@@ -2845,7 +2907,7 @@ if __name__ == '__main__':
     adc_vs_cal = False
 
     # plot a, cp LO curves
-    acp_curves = True
+    acp_curves = False
 
     # plot heatmaps with data points
     heatmap_11 = False 
@@ -2880,6 +2942,6 @@ if __name__ == '__main__':
 
     # Lambertian projection
     lambertian_proj = False
-    lambertian_smoothed = False
+    lambertian_smoothed = True
 
     main()
