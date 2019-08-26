@@ -2743,6 +2743,11 @@ def lambertian_smooth(fin1, fin2, fin, dets, bvert_tilt, cpvert_tilt, b_up, cp_u
             avg_uncert = avg_uncerts[d]/(max(ql) - min(ql))
             abs_uncert = abs_uncerts[d]/(max(ql) - min(ql))
             cbar = plt.colorbar()
+            if pulse_shape:
+                cbar.set_label('Pulse shape parameter', rotation=270, labelpad=15)
+            else:
+                cbar.set_label('Light output (MeVee)', rotation=270, labelpad=15)
+
             if save_plot:
                 cbar.ax.errorbar(0.5, 0.5, yerr=avg_uncert, ecolor='k', elinewidth=2, capsize=4, capthick=2)
             else:
@@ -2754,6 +2759,7 @@ def lambertian_smooth(fin1, fin2, fin, dets, bvert_tilt, cpvert_tilt, b_up, cp_u
             plt.text(0, 0.0, 'c\'', color='r', fontsize=f)
             plt.text(0, 0.713, 'b', color='r', fontsize=f)
             plt.text(0, -0.713, 'b', color='r', fontsize=f)
+            plt.title(str(round(11.33*np.sin(np.deg2rad(theta_n[d]))**2, 2)) + ' MeV recoil protons')
             plt.xticks([])
             plt.yticks([])
             plt.tight_layout()
