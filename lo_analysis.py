@@ -2742,10 +2742,12 @@ def lambertian_smooth(fin1, fin2, fin, dets, bvert_tilt, cpvert_tilt, b_up, cp_u
             ## need to scale y from (0, 1) to (min(ql), max(ql))
             avg_uncert = avg_uncerts[d]/(max(ql) - min(ql))
             abs_uncert = abs_uncerts[d]/(max(ql) - min(ql))
-            cbar = plt.colorbar()
+
             if pulse_shape:
+                cbar = plt.colorbar(format='%1.3f')
                 cbar.set_label('Pulse shape parameter', rotation=270, labelpad=15)
             else:
+                cbar = plt.colorbar(format='%1.2f')
                 cbar.set_label('Light output (MeVee)', rotation=270, labelpad=15)
 
             if save_plot:
@@ -2753,27 +2755,32 @@ def lambertian_smooth(fin1, fin2, fin, dets, bvert_tilt, cpvert_tilt, b_up, cp_u
             else:
                 cbar.ax.errorbar(0.5, 0.5, yerr=avg_uncert, ecolor='w', elinewidth=2, capsize=4, capthick=2)
                 cbar.ax.errorbar(0.5, 0.5, yerr=abs_uncert, ecolor='k', elinewidth=2, capsize=4, capthick=2)
+
             print '{:^5d} {:>6.1f} {:>8.3f} {:>8.3f} {:>8.3f} {:>8.3f}%'.format(det, theta_n[d], np.mean(ql), avg_uncerts[d], abs_uncerts[d], avg_uncerts[d]/np.mean(ql)*100)
             plt.text(-0.71, 0.0, 'a', color='r', fontsize=f)
             plt.text(0.71, 0., 'a', color='r', fontsize=f)
             plt.text(0, 0.0, 'c\'', color='r', fontsize=f)
             plt.text(0, 0.713, 'b', color='r', fontsize=f)
             plt.text(0, -0.713, 'b', color='r', fontsize=f)
-            plt.title(str(round(11.33*np.sin(np.deg2rad(theta_n[d]))**2, 2)) + ' MeV recoil protons')
+            if beam_11MeV:
+                en = 11.33
+            else:
+                en = 4.83
+            plt.title(str(round(en*np.sin(np.deg2rad(theta_n[d]))**2, 2)) + ' MeV recoil protons')
             plt.xticks([])
             plt.yticks([])
             plt.tight_layout()
             if save_plot:
                 if beam_11MeV:
                     if pulse_shape:
-                        plt.savefig(cwd + '/figures/lambert/det' + str(det) + '_lambert_pulse_shape_11MeV.png')
+                        plt.savefig(cwd + '/figures/lambert/det' + str(det) + '_lambert_pulse_shape_11MeV.png', dpi=500)
                     else:
-                        plt.savefig(cwd + '/figures/lambert/det' + str(det) + '_lambert_lo_11MeV.png')
+                        plt.savefig(cwd + '/figures/lambert/det' + str(det) + '_lambert_lo_11MeV.png', dpi=500)
                 else:
                     if pulse_shape:
-                        plt.savefig(cwd + '/figures/lambert/det' + str(det) + '_lambert_pulse_shape_4MeV.png')
+                        plt.savefig(cwd + '/figures/lambert/det' + str(det) + '_lambert_pulse_shape_4MeV.png', dpi=500)
                     else:
-                        plt.savefig(cwd + '/figures/lambert/det' + str(det) + '_lambert_lo_4MeV.png')
+                        plt.savefig(cwd + '/figures/lambert/det' + str(det) + '_lambert_lo_4MeV.png', dpi=500)
     plt.show()
 
 def main():

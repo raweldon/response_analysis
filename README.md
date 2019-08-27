@@ -133,4 +133,8 @@
 * 8/15/2019
     * full accounting of LO uncert for smoothing_tilt and lambertian fit functions
     * uncerts added to ratio and LO curves functions
+
+* 8/26/2019
+    * updated several plots for LBNL
+    * added make_gifs.py to show LO of all energies
           
