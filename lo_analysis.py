@@ -14,6 +14,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
+from matplotlib.colors import LogNorm
 import pandas as pd
 import re
 import time
@@ -1325,11 +1326,13 @@ def plot_ratios(fin, dets, cwd, p_dir, pulse_shape, plot_fit_ratio, bl_only, sav
             xmin, xmax = plt.xlim(0, 14.5)
             plt.plot(np.linspace(xmin, xmax, 10), [1.0]*10, 'k--')            
             plt.ylabel('Pulse shape parameter ratio', fontsize=16)
-            plt.xlabel('proton recoil energy (MeV)', fontsize=16)
-            plt.ylim(0.97, 1.09)
-            plt.legend(loc=4, fontsize=16)
+            plt.xlabel('Energy deposited (MeV)', fontsize=16)
+            #plt.ylim(0.97, 1.09)
+            plt.ylim(0.9, 1.5)
+            plt.legend(loc=1, fontsize=16)
             if save_plots:
                 plt.savefig(cwd + '/figures/pulse_shape_ratios.png', dpi=500)
+                plt.savefig(cwd + '/figures/pulse_shape_ratios.pdf')
         else:
             plt.figure(0, figsize=(12,9))
             # plot measured a/cp and a/b ratios 
@@ -1365,9 +1368,10 @@ def plot_ratios(fin, dets, cwd, p_dir, pulse_shape, plot_fit_ratio, bl_only, sav
             plt.plot(np.linspace(xmin, xmax, 10), [1.0]*10, 'k--')
             plt.ylabel('Light output ratio', fontsize=16)
             plt.legend(fontsize=16)
-            plt.xlabel('Proton recoil energy (MeV)', fontsize=16)   
+            plt.xlabel('Energy deposited (MeV)', fontsize=16)   
             if save_plots:
                 plt.savefig(cwd + '/figures/lo_ratios.png', dpi=500)
+                plt.savefig(cwd + '/figures/lo_ratios.pdf')
         
     plt.show()
 
@@ -2584,7 +2588,12 @@ def lambertian(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, 
     plt.show()
 
 def get_avg_lo_uncert(fin1, fin2, p_dir, dets, beam_11MeV, pulse_shape):
+    ''' Apply uncertainty from the calibration and measurement system (EJ-228 systematics) to averaged results
+        Calculates the average uncertainty on the light output and PSP for a given recoil proton energy
+        BL BR average code is commented out -- results are nearly identical to only BL
+        9/9/19 - included 0.3% uncertainty introduced by rotation stage (/home/radians/raweldon/tunl.2018.1_analysis/plastic_analysis/final_analysis/analysis_lo)
 
+    '''
     data_bvert = pd_load(fin1, p_dir)
     data_bvert = split_filenames(data_bvert)
     data_cpvert = pd_load(fin2, p_dir)
@@ -2601,9 +2610,33 @@ def get_avg_lo_uncert(fin1, fin2, p_dir, dets, beam_11MeV, pulse_shape):
         ps_unc = [0.00164, 0.00142, 0.00142, 0.00147, 0.0018, 0.00306, 0.0031, 0.00179, 0.00143, 0.00142, 0.00142, 0.0016]
         cal_unc = [0.01920, 0.01502, 0.01013, 0.00541, 0.00176, 0.00116, 0.00116, 0.00185, 0.00552, 0.01025, 0.01506, 0.01935]
 
+    # use BL BR average
+    #uncert, mean_ql, mean_ps = [], [], []
+    #for data in (data_bvert, data_cpvert):
+    #    for d, det in enumerate(dets):
+    #        if pulse_shape:
+    #            det_df = data.loc[(data.det_no == str(det))]
+    #            #print det, det_df.ql_abs_uncert.mean(), det_df.ql_abs_uncert.max(), det_df.ql_abs_uncert.median()
+    #            uncert.append(ps_unc[d])
+    #            #mean_ql.append(1 - (det_df.qs_mean.mean()/det_df.ql_mean.mean()))
+    #            mean_ps.append(det_df.qs_mean.mean()/det_df.ql_mean.mean())
+    #            mean_ql.append(det_df.ql_mean.mean())
+    #        else:
+    #            det_df = data.loc[(data.det_no == str(det))]
+    #            #print det, det_df.ql_abs_uncert.mean(), det_df.ql_abs_uncert.max(), det_df.ql_abs_uncert.median()
+    #            uncert.append(det_df.ql_abs_uncert.mean())
+    #            mean_ql.append(det_df.ql_mean.mean())
+    #
+    #uncerts = [(x + y)/2 for x, y in zip(uncert[:len(dets)], uncert[len(dets):])]
+    #mean_pss = [(x + y)/2 for x, y in zip(mean_ps[:len(dets)], mean_ps[len(dets):])]
+    #mean_qls = [(x + y)/2 for x, y in zip(mean_ql[:len(dets)], mean_ql[len(dets):])]
+
+    # only use BL
     uncert, mean_ql, mean_ps = [], [], []
     for data in (data_bvert, data_cpvert):
         for d, det in enumerate(dets):
+            if d > 5:
+                continue
             if pulse_shape:
                 det_df = data.loc[(data.det_no == str(det))]
                 #print det, det_df.ql_abs_uncert.mean(), det_df.ql_abs_uncert.max(), det_df.ql_abs_uncert.median()
@@ -2617,19 +2650,21 @@ def get_avg_lo_uncert(fin1, fin2, p_dir, dets, beam_11MeV, pulse_shape):
                 uncert.append(det_df.ql_abs_uncert.mean())
                 mean_ql.append(det_df.ql_mean.mean())
     
-    uncerts = [(x + y)/2 for x, y in zip(uncert[:len(dets)], uncert[len(dets):])]
-    mean_qls = [(x + y)/2 for x, y in zip(mean_ql[:len(dets)], mean_ql[len(dets):])]
-    mean_pss = [(x + y)/2 for x, y in zip(mean_ps[:len(dets)], mean_ps[len(dets):])]
+    uncerts = uncert
+    mean_qls = mean_ql
+    mean_pss = mean_ps
+
     #print mean_qls
     if pulse_shape:
         cal_unc = [c/q for c, q in zip(cal_unc, mean_qls)]
         #print cal_unc
-        cal_uncerts = [np.sqrt((c*q)**2 + u**2 + (0.005*q)**2) for c, q, u in zip(cal_unc, mean_pss, uncerts)]
+        cal_uncerts = [np.sqrt((c*q)**2 + u**2 + (0.005*q)**2 + (0.003*q)**2) for c, q, u in zip(cal_unc, mean_pss, uncerts)]
         mean_pss= [1 - q for q in mean_qls]
         return cal_uncerts, mean_pss, uncerts
 
     else:
-        cal_uncerts = [np.sqrt(c**2 + u**2 + (0.005*q)**2) for c, q, u in zip(cal_unc, mean_qls, uncerts)]
+        #                     cal_unc stat    cal range       rot stage 
+        cal_uncerts = [np.sqrt(c**2 + u**2 + (0.005*q)**2 ) for c, q, u in zip(cal_unc, mean_qls, uncerts)]
         #for i, j, k in zip(uncerts, cal_uncerts, mean_qls):
         #    print i, j, k, j/k*100, '%'
         return cal_uncerts, mean_qls, uncerts
@@ -2736,7 +2771,7 @@ def lambertian_smooth(fin1, fin2, fin, dets, bvert_tilt, cpvert_tilt, b_up, cp_u
             interp = scipy.interpolate.griddata((X, Y), ql, (grid_x, grid_y), method=method)
             #print max(ql), min(ql), max(ql)/min(ql)
             plt.figure()
-            plt.imshow(interp.T, extent=(-1,1,-1,1), origin='lower', cmap='viridis', interpolation='none')
+            plt.imshow(interp.T, extent=(-1,1,-1,1), origin='lower', cmap='viridis', interpolation='none')# , norm=LogNorm(vmin=0.07, vmax=5.36)) Log scale doesn't work 
             #plt.scatter(X, Y, c=ql, cmap='viridis')
             # put avg uncert on colorbar
             ## need to scale y from (0, 1) to (min(ql), max(ql))
@@ -2817,7 +2852,7 @@ def main():
 
     # plot ratios
     if ratios_plot:
-        plot_ratios(fin, dets, cwd, p_dir, pulse_shape=True, plot_fit_ratio=False, bl_only=True, save_plots=True)
+        plot_ratios(fin, dets, cwd, p_dir, pulse_shape=True, plot_fit_ratio=False, bl_only=True, save_plots=False)
 
     if adc_vs_cal:
         adc_vs_cal_ratios(fin, dets, cwd, p_dir, plot_fit_ratio=True)
@@ -2896,8 +2931,8 @@ def main():
         lambertian(fin[2], fin[3], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=False, pulse_shape=False)
 
     if lambertian_smoothed:
-        lambertian_smooth(sin_fits[0], sin_fits[1], (fin[0], fin[1]), dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, pulse_shape=True, save_plot=True)
-        lambertian_smooth(sin_fits[2], sin_fits[3], (fin[2], fin[3]), dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=False, pulse_shape=True, save_plot=True)
+        lambertian_smooth(sin_fits[0], sin_fits[1], (fin[0], fin[1]), dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, pulse_shape=False, save_plot=False)
+        lambertian_smooth(sin_fits[2], sin_fits[3], (fin[2], fin[3]), dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=False, pulse_shape=False, save_plot=False)
 
 if __name__ == '__main__':
     # check 3d scatter plots for both crystals
@@ -2920,7 +2955,7 @@ if __name__ == '__main__':
     adc_vs_cal = False
 
     # plot a, cp LO curves
-    acp_curves = False
+    acp_curves = True
 
     # plot heatmaps with data points
     heatmap_11 = False 
@@ -2955,6 +2990,6 @@ if __name__ == '__main__':
 
     # Lambertian projection
     lambertian_proj = False
-    lambertian_smoothed = True
+    lambertian_smoothed = False
 
     main()
