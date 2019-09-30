@@ -1296,7 +1296,7 @@ def plot_ratios(fin, dets, cwd, p_dir, pulse_shape, plot_fit_ratio, bl_only, sav
                 else:
                     continue
 
-        ms = 10
+        ms = 14
         if pulse_shape:
             # dont plot a/b ps ratio
             if i==1 or i==3:
@@ -1325,11 +1325,14 @@ def plot_ratios(fin, dets, cwd, p_dir, pulse_shape, plot_fit_ratio, bl_only, sav
                              markeredgecolor='g', markeredgewidth=1, markersize=ms, capsize=1, label=label_fit[i])
             xmin, xmax = plt.xlim(0, 14.5)
             plt.plot(np.linspace(xmin, xmax, 10), [1.0]*10, 'k--')            
-            plt.ylabel('Pulse shape parameter ratio', fontsize=16)
-            plt.xlabel('Energy deposited (MeV)', fontsize=16)
+            plt.ylabel('Pulse shape parameter ratio', fontsize=26)
+            plt.xlabel('Energy deposited (MeV)', fontsize=26)
+            plt.xticks(fontsize=16)
+            plt.yticks(fontsize=16)
             #plt.ylim(0.97, 1.09)
             plt.ylim(0.9, 1.5)
-            plt.legend(loc=1, fontsize=16)
+            plt.legend(loc=1, fontsize=18)
+            plt.tight_layout()
             if save_plots:
                 plt.savefig(cwd + '/figures/pulse_shape_ratios.png', dpi=500)
                 plt.savefig(cwd + '/figures/pulse_shape_ratios.pdf')
@@ -1366,9 +1369,12 @@ def plot_ratios(fin, dets, cwd, p_dir, pulse_shape, plot_fit_ratio, bl_only, sav
 
             xmin, xmax = plt.xlim(0, 15)
             plt.plot(np.linspace(xmin, xmax, 10), [1.0]*10, 'k--')
-            plt.ylabel('Light output ratio', fontsize=16)
-            plt.legend(fontsize=16)
-            plt.xlabel('Energy deposited (MeV)', fontsize=16)   
+            plt.ylabel('Light output ratio', fontsize=26)
+            plt.xlabel('Energy deposited (MeV)', fontsize=26)   
+            plt.xticks(fontsize=16)
+            plt.yticks(fontsize=16)
+            plt.legend(fontsize=18)
+            plt.tight_layout()
             if save_plots:
                 plt.savefig(cwd + '/figures/lo_ratios.png', dpi=500)
                 plt.savefig(cwd + '/figures/lo_ratios.pdf')
@@ -2852,7 +2858,7 @@ def main():
 
     # plot ratios
     if ratios_plot:
-        plot_ratios(fin, dets, cwd, p_dir, pulse_shape=True, plot_fit_ratio=False, bl_only=True, save_plots=False)
+        plot_ratios(fin, dets, cwd, p_dir, pulse_shape=True, plot_fit_ratio=False, bl_only=True, save_plots=True)
 
     if adc_vs_cal:
         adc_vs_cal_ratios(fin, dets, cwd, p_dir, plot_fit_ratio=True)
@@ -2949,13 +2955,13 @@ if __name__ == '__main__':
     compare_a_axes = False
 
     # plots a/c' and a/b ql or pulse shape ratios from 0deg measurements
-    ratios_plot = False
+    ratios_plot = True
 
     # analyze relative light output ratios agains calibrated data ratios (used to identify original calibration issues)
     adc_vs_cal = False
 
     # plot a, cp LO curves
-    acp_curves = True
+    acp_curves = False
 
     # plot heatmaps with data points
     heatmap_11 = False 
