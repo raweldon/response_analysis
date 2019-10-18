@@ -4,7 +4,7 @@ import os
 import numpy as np
 
 cwd = os.getcwd()
-pulse_shape = True
+pulse_shape = False
 
 if pulse_shape:
     files_11 = glob.glob(cwd + '/figures/lambert/*shape_11*')
