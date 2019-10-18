@@ -1919,8 +1919,8 @@ def acp_lo_curves_fits(fin, dets, cwd, p_dir, match_data, plot_meas_data, plot_s
         pickles from output of plot_acp_lo_curves
     '''
 
-    def fit(E_p, a, b, c, d):
-        return a*E_p - b*(1-np.exp(-c*E_p**d))
+    def fit(E_p, a, b, c, d, e):
+        return e*(a*E_p - b*(1-np.exp(-c*E_p**d)))
 
     def get_smoothed_data(dets):
         ql_maxs, ql_mins = [], []
@@ -2009,21 +2009,22 @@ def acp_lo_curves_fits(fin, dets, cwd, p_dir, match_data, plot_meas_data, plot_s
         if not plot_smoothed_data:
             # exponential fit
             exp_model = lmfit.Model(fit)
-            params = exp_model.make_params(a=0.75, b=2.6, c=0.25, d=1)
+            params = exp_model.make_params(a=0.75, b=2.6, c=0.25, d=1, e=1)
             params['d'].vary = False
+            params['e'].vary = False
             res_a_bvert = exp_model.fit(a_ql_bvert, params, E_p=a_p_erg_bvert)
             res_a_cpvert = exp_model.fit(a_ql_cpvert, params, E_p=a_p_erg_cpvert)
             res_cp = exp_model.fit(cp_ql, params, E_p=cp_p_erg)
             res_b = exp_model.fit(b_ql, params, E_p=b_p_erg)
 
             # print '\n', res_a_bvert.message
-            # print lmfit.fit_report(res_a_bvert, show_correl=True)
-            # print '\n', res_a_cpvert.message
-            # print lmfit.fit_report(res_a_cpvert, show_correl=True)
-            # print '\n', res_cp.message
-            # print lmfit.fit_report(res_cp, show_correl=True)
-            # print '\n', res_b.message
-            # print lmfit.fit_report(res_b, show_correl=True)
+            print lmfit.fit_report(res_a_bvert, show_correl=True)
+            print '\n', res_a_cpvert.message
+            print lmfit.fit_report(res_a_cpvert, show_correl=True)
+            print '\n', res_cp.message
+            print lmfit.fit_report(res_cp, show_correl=True)
+            print '\n', res_b.message
+            print lmfit.fit_report(res_b, show_correl=True)
 
             # analyze systematic uncert effect on the light output
             xvals = np.linspace(0, 10, 1000)
@@ -2031,25 +2032,25 @@ def acp_lo_curves_fits(fin, dets, cwd, p_dir, match_data, plot_meas_data, plot_s
             uncerts_4 = [0.026, 0.03, 0.032, 0.03, 0.025, 0.018]
             print '\n\n{:^8s} {:^8s} {:^8s} {:^10s}'.format('E_p', 'LO', 'LO-sig_lo', 'rel_diff') 
             for a, a_erg, unc in zip(a_ql_bvert, a_p_erg_bvert, uncerts_11 + uncerts_4):
-                lo = fit(a_erg, res_a_bvert.params['a'], res_a_bvert.params['b'], res_a_bvert.params['c'], res_a_bvert.params['d'])
-                lo_sig = fit(a_erg - unc, res_a_bvert.params['a'], res_a_bvert.params['b'], res_a_bvert.params['c'], res_a_bvert.params['d'])
+                lo = fit(a_erg, res_a_bvert.params['a'], res_a_bvert.params['b'], res_a_bvert.params['c'], res_a_bvert.params['d'], res_a_bvert.params['e'])
+                lo_sig = fit(a_erg - unc, res_a_bvert.params['a'], res_a_bvert.params['b'], res_a_bvert.params['c'], res_a_bvert.params['d'], res_a_bvert.params['e'])
                 print '{:^8.3f} {:>8.3f} {:>8.3f} {:>8.3f}%'.format(float(a_erg), lo, lo_sig, (lo - lo_sig)/(lo + lo_sig)*200)  
 
             # measured data
-            #ax.errorbar(a_p_erg_bvert, a_ql_bvert, yerr=a_uncert_cal_bvert, xerr=a_ep_err_bvert, ecolor='black', markerfacecolor='None', fmt='^', 
-            #                markeredgecolor='r', markeredgewidth=1, markersize=9, capsize=1, label= 'a-axis, crystal 1, measured')
-            #ax.errorbar(a_p_erg_cpvert, a_ql_cpvert, yerr=a_uncert_cal_cpvert, xerr=a_ep_err_cpvert, ecolor='black', markerfacecolor='None', fmt='v', 
-            #            markeredgecolor='r', markeredgewidth=1, markersize=9, capsize=1, label= 'a-axis, crystal 3, measured')
-            #ax.errorbar(cp_p_erg, cp_ql, yerr=cp_uncert_cal, xerr=cp_ep_err, ecolor='black', markerfacecolor='None', fmt='s', 
-            #                markeredgecolor='g', markeredgewidth=1, markersize=9, capsize=1, label='c\'-axis, crystal 1, measured')
-            #ax.errorbar(b_p_erg, b_ql, yerr=b_uncert_cal, xerr=b_ep_err, ecolor='black', markerfacecolor='None', fmt='o', 
-            #                markeredgecolor='b', markeredgewidth=1, markersize=9, capsize=1, label='b-axis, crystal 3, measured')
+            ax.errorbar(a_p_erg_bvert, a_ql_bvert, yerr=a_uncert_cal_bvert, xerr=a_ep_err_bvert, ecolor='black', markerfacecolor='None', fmt='^', 
+                           markeredgecolor='r', markeredgewidth=1, markersize=9, capsize=1, label= 'a-axis, crystal 1, measured')
+            ax.errorbar(a_p_erg_cpvert, a_ql_cpvert, yerr=a_uncert_cal_cpvert, xerr=a_ep_err_cpvert, ecolor='black', markerfacecolor='None', fmt='v', 
+                       markeredgecolor='r', markeredgewidth=1, markersize=9, capsize=1, label= 'a-axis, crystal 3, measured')
+            ax.errorbar(cp_p_erg, cp_ql, yerr=cp_uncert_cal, xerr=cp_ep_err, ecolor='black', markerfacecolor='None', fmt='s', 
+                           markeredgecolor='g', markeredgewidth=1, markersize=9, capsize=1, label='c\'-axis, crystal 1, measured')
+            ax.errorbar(b_p_erg, b_ql, yerr=b_uncert_cal, xerr=b_ep_err, ecolor='black', markerfacecolor='None', fmt='o', 
+                           markeredgecolor='b', markeredgewidth=1, markersize=9, capsize=1, label='b-axis, crystal 3, measured')
 
             # plot exponential fits
-            ax.plot(xvals, fit(xvals, res_a_bvert.params['a'], res_a_bvert.params['b'], res_a_bvert.params['c'], res_a_bvert.params['d']), 'r', alpha=0.5)
-            ax.plot(xvals, fit(xvals, res_a_cpvert.params['a'], res_a_cpvert.params['b'], res_a_cpvert.params['c'], res_a_cpvert.params['d']), 'r--', alpha=0.5)
-            ax.plot(xvals, fit(xvals, res_cp.params['a'], res_cp.params['b'], res_cp.params['c'], res_cp.params['d']), 'g', alpha=0.5)
-            ax.plot(xvals, fit(xvals, res_b.params['a'], res_b.params['b'], res_b.params['c'], res_b.params['d']), 'b', alpha=0.5)
+            ax.plot(xvals, fit(xvals, res_a_bvert.params['a'], res_a_bvert.params['b'], res_a_bvert.params['c'], res_a_bvert.params['d'], res_a_bvert.params['e']), 'r', alpha=0.5)
+            ax.plot(xvals, fit(xvals, res_a_cpvert.params['a'], res_a_cpvert.params['b'], res_a_cpvert.params['c'], res_a_cpvert.params['d'], res_a_cpvert.params['e']), 'r--', alpha=0.5)
+            ax.plot(xvals, fit(xvals, res_cp.params['a'], res_cp.params['b'], res_cp.params['c'], res_cp.params['d'], res_cp.params['e']), 'g', alpha=0.5)
+            ax.plot(xvals, fit(xvals, res_b.params['a'], res_b.params['b'], res_b.params['c'], res_b.params['d'], res_b.params['e']), 'b', alpha=0.5)
 
         if not log_plot:
             # zoomed axes
@@ -2071,31 +2072,22 @@ def acp_lo_curves_fits(fin, dets, cwd, p_dir, match_data, plot_meas_data, plot_s
 
         # exponential fit
         exp_model = lmfit.Model(fit)
-        params = exp_model.make_params(a=0.75, b=2.6, c=0.25, d=1)
-        params['d'].vary = False
+        params = exp_model.make_params(a=0.75, b=2.6, c=0.25, d=1, e=1)
+        #params['d'].vary = False
+        params['e'].vary = False
         res_a_bvert = exp_model.fit(a_bvert_smoothed, params, E_p=a_p_erg_bvert)
         res_a_cpvert = exp_model.fit(a_cpvert_smoothed, params, E_p=a_p_erg_cpvert)
         res_cp = exp_model.fit(cp_smoothed, params, E_p=cp_p_erg)
         res_b = exp_model.fit(b_smoothed, params, E_p=b_p_erg)
 
-        # print '\n', res_a_bvert.message
-        # print lmfit.fit_report(res_a_bvert, show_correl=True)
-        # print '\n', res_a_cpvert.message
-        # print lmfit.fit_report(res_a_cpvert, show_correl=True)
-        # print '\n', res_cp.message
-        # print lmfit.fit_report(res_cp, show_correl=True)
-        # print '\n', res_b.message
-        # print lmfit.fit_report(res_b, show_correl=True)
-
-        # analyze systematic uncert effect on the light output
-        xvals = np.linspace(0, 10, 1000)
-        uncerts_11 = [0.043, 0.06, 0.068, 0.068, 0.058, 0.043]
-        uncerts_4 = [0.026, 0.03, 0.032, 0.03, 0.025, 0.018]
-        print '\n\n{:^8s} {:^8s} {:^8s} {:^10s}'.format('E_p', 'LO', 'LO-sig_lo', 'rel_diff') 
-        for a, a_erg, unc in zip(a_ql_bvert, a_p_erg_bvert, uncerts_11 + uncerts_4):
-            lo = fit(a_erg, res_a_bvert.params['a'], res_a_bvert.params['b'], res_a_bvert.params['c'], res_a_bvert.params['d'])
-            lo_sig = fit(a_erg - unc, res_a_bvert.params['a'], res_a_bvert.params['b'], res_a_bvert.params['c'], res_a_bvert.params['d'])
-            print '{:^8.3f} {:>8.3f} {:>8.3f} {:>8.3f}%'.format(float(a_erg), lo, lo_sig, (lo - lo_sig)/(lo + lo_sig)*200) 
+        print '\n', res_a_bvert.message
+        print lmfit.fit_report(res_a_bvert, show_correl=True)
+        print '\n', res_a_cpvert.message
+        print lmfit.fit_report(res_a_cpvert, show_correl=True)
+        print '\n', res_cp.message
+        print lmfit.fit_report(res_cp, show_correl=True)
+        print '\n', res_b.message
+        print lmfit.fit_report(res_b, show_correl=True)
 
         ax.errorbar(a_p_erg_cpvert, a_bvert_smoothed, yerr=[np.sqrt((0.015*a)**2 + unc**2) for a, unc in zip(a_bvert_smoothed, a_uncert_cal_bvert)], xerr=a_ep_err_cpvert, 
                      ecolor='black', markerfacecolor='None', fmt='<', markeredgecolor='r', markeredgewidth=1, markersize=9, capsize=1, label='a-axis, crystal 1, smoothed')
@@ -2107,10 +2099,11 @@ def acp_lo_curves_fits(fin, dets, cwd, p_dir, match_data, plot_meas_data, plot_s
                      ecolor='black', markerfacecolor='None', fmt='*', markeredgecolor='b', markeredgewidth=1, markersize=9, capsize=1, label='b-axis, crystal 3, smoothed') 
 
         # plot exponential fits
-        ax.plot(xvals, fit(xvals, res_a_bvert.params['a'], res_a_bvert.params['b'], res_a_bvert.params['c'], res_a_bvert.params['d']), 'r', alpha=0.5)
-        ax.plot(xvals, fit(xvals, res_a_cpvert.params['a'], res_a_cpvert.params['b'], res_a_cpvert.params['c'], res_a_cpvert.params['d']), 'r--', alpha=0.5)
-        ax.plot(xvals, fit(xvals, res_cp.params['a'], res_cp.params['b'], res_cp.params['c'], res_cp.params['d']), 'g', alpha=0.5)
-        ax.plot(xvals, fit(xvals, res_b.params['a'], res_b.params['b'], res_b.params['c'], res_b.params['d']), 'b', alpha=0.5)
+        xvals = np.linspace(0, 10, 1000)
+        ax.plot(xvals, fit(xvals, res_a_bvert.params['a'], res_a_bvert.params['b'], res_a_bvert.params['c'], res_a_bvert.params['d'], res_a_bvert.params['e']), 'r', alpha=0.5)
+        ax.plot(xvals, fit(xvals, res_a_cpvert.params['a'], res_a_cpvert.params['b'], res_a_cpvert.params['c'], res_a_cpvert.params['d'], res_a_cpvert.params['e']), 'r--', alpha=0.5)
+        ax.plot(xvals, fit(xvals, res_cp.params['a'], res_cp.params['b'], res_cp.params['c'], res_cp.params['d'], res_cp.params['e']), 'g', alpha=0.5)
+        ax.plot(xvals, fit(xvals, res_b.params['a'], res_b.params['b'], res_b.params['c'], res_b.params['d'], res_b.params['e']), 'b', alpha=0.5)
 
         if not log_plot:
             axins.errorbar(a_p_erg_cpvert, a_bvert_smoothed, yerr=[np.sqrt((0.015*a)**2 + unc**2) for a, unc in zip(a_bvert_smoothed, a_uncert_cal_bvert)], xerr=a_ep_err_cpvert, 
@@ -2137,9 +2130,9 @@ def acp_lo_curves_fits(fin, dets, cwd, p_dir, match_data, plot_meas_data, plot_s
         plt.setp(box, linestyle='-', linewidth=0.5)
         plt.setp([c1, c2], linewidth=0.25)
 
-    ax.set_ylabel('Light output (MeVee)', fontsize=20)
-    ax.set_xlabel('Proton recoil energy (MeV)', fontsize=20)    
-    ax.tick_params(labelsize=14)
+    ax.set_ylabel('Light output (MeVee)', fontsize=22)
+    ax.set_xlabel('Proton recoil energy (MeV)', fontsize=22)    
+    ax.tick_params(labelsize=16)
     if log_plot:
         plt.yscale('log')
         plt.xscale('log')
@@ -2148,8 +2141,8 @@ def acp_lo_curves_fits(fin, dets, cwd, p_dir, match_data, plot_meas_data, plot_s
     else:
         ax.set_ylim(-0.1, 5.7)
         ax.set_xlim(0, 11)
-    ax.legend(loc=2, fontsize=14)
-    #plt.tight_layout()
+    ax.legend(loc=2, fontsize=16)
+    plt.tight_layout()
 
     if save_plots:
         plt.savefig(cwd + '/figures/lo_curves_smoothed_only.pdf')
@@ -3236,7 +3229,7 @@ def main():
         plot_acp_lo_curves(fin, dets, cwd, p_dir, pulse_shape=False, bl_only=True, plot_fit_data=False, smoothed_data=False)
     
     if acp_curves_fits:
-        acp_lo_curves_fits(fin, dets, cwd, p_dir, match_data=True, plot_meas_data=False, plot_smoothed_data=True, log_plot=False, save_plots=True)
+        acp_lo_curves_fits(fin, dets, cwd, p_dir, match_data=True, plot_meas_data=True, plot_smoothed_data=False, log_plot=True, save_plots=False)
 
     # 3d plotting
     theta_n = [70, 60, 50, 40, 30, 20, 20, 30, 40, 50, 60, 70]
