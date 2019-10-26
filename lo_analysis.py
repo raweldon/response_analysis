@@ -298,14 +298,24 @@ def smoothing_tilt(dets, pickle_name, cwd, p_dir, pulse_shape, delayed, prompt, 
                 print '\n', lmfit.fit_report(res)
             return res
 
+    #            bvert11  bvert4 cpvert11 cpvert4
+    drift_uncs = [0.0085, 0.0027, 0.0113, 0.0055] # %, from /home/radians/raweldon/tunl.2018.1_analysis/stilbene_final/lo_calibration/cal_and_temp.out
     for f in pickle_name:
         if '11' in f:
             beam_11MeV = True
             # from /home/radians/raweldon/tunl.2018.1_analysis/stilbene_final/lo_calibration/uncert_gamma_cal.py 
             cal_unc = [0.00792, 0.00540, 0.00285, 0.00155, 0.00271, 0.00372, 0.00375, 0.00275, 0.00156, 0.00278, 0.00540, 0.00800]
+            if 'bvert' in f:
+                drift_unc = drift_uncs[0]
+            else:
+                drift_unc = drift_uncs[2]
         else:
             beam_11MeV = False
             cal_unc = [0.01920, 0.01502, 0.01013, 0.00541, 0.00176, 0.00116, 0.00116, 0.00185, 0.00552, 0.01025, 0.01506, 0.01935]
+            if 'bvert' in f:
+                drift_unc = drift_uncs[1]
+            else:
+                drift_unc = drift_uncs[3]
         if 'bvert' in f:
             max_ql = []
             tilts = [0, 45, -45, 30, -30, 15, -15]
@@ -418,23 +428,26 @@ def smoothing_tilt(dets, pickle_name, cwd, p_dir, pulse_shape, delayed, prompt, 
 
                     if beam_11MeV:
                         if pulse_shape:
+                            # note: did not need to update psp when lo was updated (10/23/19)
                             max_ql = [0.3211530198583945, 0.3310542105630364, 0.34502415458937197, 0.3687198259854635, 0.3996132774734128, 0.4287629902782434]
-                            lo_unc = [np.sqrt((cal_unc[d]*q)**2 + ps_unc[d]**2 + (0.005*q)**2) for q in data.values]
+                            lo_unc = [np.sqrt((cal_unc[d]*q)**2 + ps_unc[d]**2 + (drift_unc*q)**2) for q in data.values]
                         else:
-                            max_ql = [5.361060691111871, 4.321438060046981, 3.087094177473607, 1.902, 0.9435, 0.3169] # calulcated directly above (uncomment, copy from output)
-                            # a-axis data - only minor difference in ratios
-                            # max_ql = [5.361149916115185, 4.321537988940735, 3.0872054468178125, 1.8909842876005452, 0.9295366107037486, 0.3129910357079966]
-                            lo_unc = [np.sqrt(cal_unc[d]**2 + u**2 + (0.005*q)**2) for u, q in zip(data_uncert.values, data.values)]
+                            # original scaling to maximum (0 deg mount) - produced terrible LO curves exponential fits
+                            #max_ql = [5.361060691111871, 4.321438060046981, 3.087094177473607, 1.902, 0.9435, 0.3169] # calulcated directly above (uncomment, copy from output)
+                            # updated scaling - generally better LO curve fits with no change to LO ratios (*_new.p pickles), 10/23/19
+                            max_ql = [5.361149916115185, 4.321537988940735, 3.0872054468178125, 1.8909842876005452, 0.9295366107037486, 0.3129910357079966]
+                            lo_unc = [np.sqrt(cal_unc[d]**2 + u**2 + (drift_unc*q)**2) for u, q in zip(data_uncert.values, data.values)]
                     else:
                         if pulse_shape:
                             max_ql = [0.36916873449131526, 0.37724319306930687, 0.39375000000000004, 0.40695108495770493, 0.4193293885601578, 0.38900203665987776]
-                            lo_unc = [np.sqrt((cal_unc[d]*q)**2 + ps_unc[d]**2 + (0.005*q)**2) for q in data.values]
+                            lo_unc = [np.sqrt((cal_unc[d]*q)**2 + ps_unc[d]**2 + (drift_unc*q)**2) for q in data.values]
 
                         else:
-                            max_ql = [1.6429, 1.3094, 0.9084, 0.5553, 0.2733, 0.1042]
-                            # a-axis data - only minor difference in ratios
-                            #max_ql = [1.5830163477756682, 1.2607351514403824, 0.8805279765311516, 0.5334405271669661, 0.2654777866856121, 0.1008253679627749]
-                            lo_unc = [np.sqrt(cal_unc[d]**2 + u**2 + (0.005*q)**2) for u, q in zip(data_uncert.values, data.values)]
+                            # original scaling to maximum (0 deg mount) - produced terrible LO curves exponential fits
+                            #max_ql = [1.6429, 1.3094, 0.9084, 0.5553, 0.2733, 0.1042]
+                            # updated scaling - generally better LO curve fits with no change to LO ratios (*_new.p pickles)
+                            max_ql = [1.5830163477756682, 1.2607351514403824, 0.8805279765311516, 0.5334405271669661, 0.2654777866856121, 0.1008253679627749]
+                            lo_unc = [np.sqrt(cal_unc[d]**2 + u**2 + (drift_unc*q)**2) for u, q in zip(data_uncert.values, data.values)]
 
                     c = max(y_vals)/max_ql[d]
                     smoothed_data = data/c
@@ -1068,7 +1081,7 @@ def plot_smoothed_fitted_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_u
             mlab.show()  
         #plt.show()
 
-def compare_a_axis_recoils(fin, dets, cwd, p_dir, plot_by_det, plot_lo_curves, save_plots):
+def compare_a_axis_recoils(fin, dets, cwd, p_dir, plot_by_det, plot_lo_curves, save_a_axis_lo_stds, save_plots):
 
     def remove_cal(lo, m, b):
         return m*np.array(lo) + b
@@ -1110,8 +1123,9 @@ def compare_a_axis_recoils(fin, dets, cwd, p_dir, plot_by_det, plot_lo_curves, s
             det_energies = [round(En*np.sin(np.deg2rad(x))**2, 2) for x in det_angles]
             bl_br = ['BL', 'BL', 'BL', 'BL', 'BL', 'BL', 'BR', 'BR', 'BR', 'BR', 'BR', 'BR']
             color = ['r', 'r', 'r', 'r', 'r', 'r', 'b', 'b', 'b', 'b', 'b', 'b']
-            print '\ndet   ql_mean    std    rel uncert'
-            print '------------------------------------'
+            shapes = ['o', 'o', 'o', 'o', 'o', 'o', '^', '^', '^', '^', '^', '^']
+            print '\ndet   ql_mean    std   rel_uncert  max_variation'
+            print '--------------------------------------------------'
             means, stds, E_ps = [], [], []
             for d, det in enumerate(dets):
 
@@ -1121,28 +1135,29 @@ def compare_a_axis_recoils(fin, dets, cwd, p_dir, plot_by_det, plot_lo_curves, s
 
                 # calculate mean and std
                 ql_mean = det_df.ql.mean()
-                ql_std = det_df.ql.std()/np.sqrt(len(det_df.ql.values)) # uncertainty on the mean
-                print '{:^4} {:>8} {:>8} {:>8}'.format(det, round(ql_mean, 4), round(ql_std, 4), round(ql_std/ql_mean, 4))
+                ql_std = det_df.ql.std()#/np.sqrt(len(det_df.ql.values)) # uncertainty on the mean
+                print '{:^4} {:>8} {:>8} {:>8}% {:>8.2f}%'.format(det, round(ql_mean, 3), round(ql_std, 3), round(ql_std/ql_mean, 4)*100, 
+                                                               (max(det_df.ql.values) - min(det_df.ql.values))/(max(det_df.ql.values) + min(det_df.ql.values))*200)
 
                 means.append(ql_mean)
                 stds.append(ql_std)
 
                 # plot lo vs mount angle
                 plt.figure(fig_no[d], figsize=(10,7))
-                plt.errorbar(det_df.tilt.values, det_df.ql.values, yerr=det_df.abs_uncert.values, ecolor='black', markerfacecolor='None', fmt='o', 
-                                markeredgecolor=color[d], markeredgewidth=1, markersize=10, capsize=1, label=str(det_energies[d]) + ' MeV recoil, ' + str(bl_br[d]), zorder=10)
+                plt.errorbar(det_df.tilt.values, det_df.ql.values, yerr=det_df.abs_uncert.values, ecolor='black', markerfacecolor='None', fmt=shapes[d], 
+                                markeredgecolor=color[d], markeredgewidth=1, markersize=14, capsize=1, label=str(det_energies[d]) + ' MeV recoil, ' + str(bl_br[d]), zorder=10)
                 xvals = np.linspace(-47, 47, 10)
                 plt.plot(xvals, [ql_mean]*10, color=color[d])#, label=str(det_angles[d]) + '$^{\circ}$ ' + str(bl_br[d]) + ' mean')
-                plt.plot(xvals, [ql_mean + ql_std]*10, '--', color=color[d], alpha=0.2)
-                plt.plot(xvals, [ql_mean - ql_std]*10, '--', color=color[d], alpha=0.2)
+                plt.plot(xvals, [ql_mean + ql_std]*10, '--', color=color[d], alpha=1)
+                plt.plot(xvals, [ql_mean - ql_std]*10, '--', color=color[d], alpha=1)
                 plt.fill_between(xvals, [ql_mean + ql_std]*10, [ql_mean - ql_std]*10, facecolor=color[d], alpha=0.05)
-                plt.xlabel('Mount angle (degree)', fontsize=18)
-                plt.ylabel('Light output (MeVee)', fontsize=18)
-                plt.xticks(fontsize=14)
-                plt.yticks(fontsize=14)
+                plt.xlabel('Mount angle (degree)', fontsize=24)
+                plt.ylabel('Light output (MeVee)', fontsize=24)
+                plt.xticks(fontsize=16)
+                plt.yticks(fontsize=16)
                 plt.xlim(-47, 47)
-                plt.title(title + ', ' + title2, fontsize=18)
-                plt.legend(fontsize=16)
+                #plt.title(title + ', ' + title2, fontsize=24)
+                plt.legend(fontsize=20)
                 plt.tight_layout()
                 if save_plots:
                     if beam_11MeV:
@@ -1219,30 +1234,38 @@ def compare_a_axis_recoils(fin, dets, cwd, p_dir, plot_by_det, plot_lo_curves, s
             rel_diff.append((qlb - qlc)/(qlb + qlc)*200)
         print '\nMean rel_diff \n   Low gain = ', round(np.mean(rel_diff[:6]),3), '%\n   High gain = ', round(np.mean(rel_diff[6:]), 3), '%'
 
-    # m and E_0 for 11 MeV cpvert, analyze diff between bvert and cpvert measurements with same mount
-    m = 8662.28
-    b = -166.65
-    new_m = 8662.28
-    mb = 8598.74
-    bb = -155.15
-    new_mb = 8598.74
-    rel_diff = []
-    print '\n11 MeV a-axis LO rel diff between bvert and cpvert crystals\n'
-    print ' tilt  LO_bvert  LO_cpvert  rel_diff'
-    for bvert_11, cpvert_11, tilt in zip(a_qls[0], a_qls[1], tilts_arr[0]):
-        cpvert_11 = new_cal(cpvert_11, m, b, new_m, b)
-        bvert_11 = new_cal(bvert_11, mb, bb, new_mb, bb)
-        print '{:^5} {:>8} {:>9} {:>8}%'.format(tilt, bvert_11, cpvert_11, round((bvert_11 - cpvert_11)/(bvert_11 + cpvert_11)*200, 2))
-        rel_diff.append((bvert_11 - cpvert_11)/(bvert_11 + cpvert_11)*200)
-    print'\n rel_diff mean = ', np.mean(rel_diff), '%'   
+    # save a-axis light output stds
+    if save_a_axis_lo_stds:
+        out = open( p_dir + 'a_axis_lo_stds.p', "wb" )
+        pickle.dump( ql_stds, out)
+        print '\n\npickle saved to ' + p_dir + 'a_axis_lo_stds.p'
+        out.close()
 
-    print '\n4 MeV a-axis LO rel diff between bvert and cpvert crystals\n'
-    print ' tilt  LO_bvert  LO_cpvert  rel_diff'
-    rel_diff = []
-    for bvert_4, cpvert_4, tilt in zip(a_qls[2], a_qls[3], tilts_arr[2]):
-        print '{:^5} {:>8} {:>9} {:>8}%'.format(tilt, bvert_4, cpvert_4, round((bvert_4 - cpvert_4)/(bvert_4 + cpvert_4)*200, 2))
-        rel_diff.append((bvert_4 - cpvert_4)/(bvert_4 + cpvert_4)*200)
-    print'\n rel_diff mean = ', np.mean(rel_diff), '%'
+
+    ## m and E_0 for 11 MeV cpvert, analyze diff between bvert and cpvert measurements with same mount
+    # m = 8662.28
+    # b = -166.65
+    # new_m = 8662.28
+    # mb = 8598.74
+    # bb = -155.15
+    # new_mb = 8598.74
+    # rel_diff = []
+    # print '\n11 MeV a-axis LO rel diff between bvert and cpvert crystals\n'
+    # print ' tilt  LO_bvert  LO_cpvert  rel_diff'
+    # for bvert_11, cpvert_11, tilt in zip(a_qls[0], a_qls[1], tilts_arr[0]):
+    #     cpvert_11 = new_cal(cpvert_11, m, b, new_m, b)
+    #     bvert_11 = new_cal(bvert_11, mb, bb, new_mb, bb)
+    #     print '{:^5} {:>8} {:>9} {:>8}%'.format(tilt, bvert_11, cpvert_11, round((bvert_11 - cpvert_11)/(bvert_11 + cpvert_11)*200, 2))
+    #     rel_diff.append((bvert_11 - cpvert_11)/(bvert_11 + cpvert_11)*200)
+    # print'\n rel_diff mean = ', np.mean(rel_diff), '%'   
+
+    # print '\n4 MeV a-axis LO rel diff between bvert and cpvert crystals\n'
+    # print ' tilt  LO_bvert  LO_cpvert  rel_diff'
+    # rel_diff = []
+    # for bvert_4, cpvert_4, tilt in zip(a_qls[2], a_qls[3], tilts_arr[2]):
+    #     print '{:^5} {:>8} {:>9} {:>8}%'.format(tilt, bvert_4, cpvert_4, round((bvert_4 - cpvert_4)/(bvert_4 + cpvert_4)*200, 2))
+    #     rel_diff.append((bvert_4 - cpvert_4)/(bvert_4 + cpvert_4)*200)
+    # print'\n rel_diff mean = ', np.mean(rel_diff), '%'
 
     plt.show()
 
@@ -1286,6 +1309,12 @@ def plot_ratios(fin, dets, cwd, p_dir, pulse_shape, plot_fit_ratio, bl_only, sav
         #    label = ['L$_a$/L$_{c\'}$', 'L$_a$/L$_b$', '', '']
         label = ['L$_a$/L$_{c\'}$ measured data', 'L$_a$/L$_b$ measured data', '', '']
 
+        # uncert measured with a-axis, uncert due to PMT drift
+        a_axis_unc_bvert11, a_axis_unc_cpvert11, a_axis_unc_bvert4, a_axis_unc_cpvert4 = pickle.load( open(p_dir + 'a_axis_lo_stds.p', 'rb')) # MeVee, from compare_a_axis_recoils
+        #               b11      cp11     b4     cp4
+        #drift_uncs =  (0.0085, 0.0113, 0.0027, 0.0055) # percent, from /home/radians/raweldon/tunl.2018.1_analysis/stilbene_final/lo_calibration/cal_and_temp_changes.py
+        drift_uncs =  (0.0085, 0.0113, 0.0027, 0.0055) #0.015 accounts for 3% separation (lack of aging)
+
         if '11' in f:
             beam_11MeV = True
             angles = [70, 60, 50, 40, 30, 20, 20, 30, 40, 50, 60, 70]
@@ -1296,6 +1325,7 @@ def plot_ratios(fin, dets, cwd, p_dir, pulse_shape, plot_fit_ratio, bl_only, sav
             # cal_unc - uncert due to change in calibration over experiment (used cpvert uncert - worse than bvert)
             # from /home/radians/raweldon/tunl.2018.1_analysis/stilbene_final/lo_calibration/uncert_gamma_cal.py 
             cal_unc = np.array([0.00792, 0.00540, 0.00285, 0.00155, 0.00271, 0.00372, 0.00375, 0.00275, 0.00156, 0.00278, 0.00540, 0.00800])
+
         else:
             beam_11MeV = False
             angles = [60, 40, 20, 30, 50, 70]
@@ -1306,10 +1336,22 @@ def plot_ratios(fin, dets, cwd, p_dir, pulse_shape, plot_fit_ratio, bl_only, sav
             #tilts = [0, 45, -45, 30, -30, 15, -15]
             tilts = [0]
             color = 'r'
+            if beam_11MeV:
+                a_axis_unc = np.array(a_axis_unc_bvert11)
+                drift_unc = drift_uncs[0]
+            else:
+                a_axis_unc = a_axis_unc_bvert4
+                drift_unc = drift_uncs[2]
         else:
             #tilts = [0, 30, -30, 15, -15]
             tilts = [0]
             color = 'b'
+            if beam_11MeV:
+                a_axis_unc = np.array(a_axis_unc_cpvert11)
+                drift_unc = drift_uncs[1]
+            else:
+                a_axis_unc = a_axis_unc_cpvert4
+                drift_unc = drift_uncs[3]
 
         data = pd_load(f, p_dir)
         data = split_filenames(data)  
@@ -1328,17 +1370,26 @@ def plot_ratios(fin, dets, cwd, p_dir, pulse_shape, plot_fit_ratio, bl_only, sav
             cp_b_fit_ql = cp_b_axes_df.fit_ql.iloc[np.where(cp_b_axes_df.tilt == 0)].values
             ratio = a_ql/cp_b_ql
             fit_ratio = a_fit_ql/cp_b_fit_ql
+            # old uncerts
+            #if pulse_shape:
+            #    a_ql_vals = a_axis_df.ql_vals.iloc[np.where(a_axis_df.tilt == 0)].values
+            #    cp_b_ql_vals = cp_b_axes_df.ql_vals.iloc[np.where(cp_b_axes_df.tilt == 0)].values
+            #    a_uncert_cal = np.sqrt((cal_unc/a_ql_vals*a_ql)**2 + ps_unc**2 + (0.005*a_ql)**2)
+            #    cp_b_uncert_cal = np.sqrt((cal_unc/cp_b_ql_vals*cp_b_ql)**2 + cp_b_uncert**2 + (0.005*cp_b_ql)**2)
+            #else:
+            #    a_uncert_cal = np.sqrt(cal_unc**2 + a_uncert**2 + (0.015*a_ql)**2)
+            #    print a_ql
+            #    print 0.015*a_ql
+            #    cp_b_uncert_cal = np.sqrt(cal_unc**2 + cp_b_uncert**2 + (0.015*cp_b_ql)**2)
+
             if pulse_shape:
                 a_ql_vals = a_axis_df.ql_vals.iloc[np.where(a_axis_df.tilt == 0)].values
                 cp_b_ql_vals = cp_b_axes_df.ql_vals.iloc[np.where(cp_b_axes_df.tilt == 0)].values
-                a_uncert_cal = np.sqrt((cal_unc/a_ql_vals*a_ql)**2 + ps_unc**2 + (0.005*a_ql)**2)
-                cp_b_uncert_cal = np.sqrt((cal_unc/cp_b_ql_vals*cp_b_ql)**2 + cp_b_uncert**2 + (0.005*cp_b_ql)**2)
+                a_uncert_cal = np.sqrt((cal_unc/a_ql_vals*a_ql)**2 + ps_unc**2 + (drift_unc*a_ql)**2) # note: a_ql is psp, a_ql_val is a-axis LO (used to ge % uncerts)
+                cp_b_uncert_cal = np.sqrt((cal_unc/cp_b_ql_vals*cp_b_ql)**2 + cp_b_uncert**2 + (drift_unc*cp_b_ql)**2)
             else:
-                a_uncert_cal = np.sqrt(cal_unc**2 + a_uncert**2 + (0.015*a_ql)**2)
-                print a_ql
-                print 0.015*a_ql
-                cp_b_uncert_cal = np.sqrt(cal_unc**2 + cp_b_uncert**2 + (0.015*cp_b_ql)**2)
-
+                a_uncert_cal = np.sqrt(cal_unc**2 + a_uncert**2 + (drift_unc*a_ql)**2)#  + a_axis_unc**2 )
+                cp_b_uncert_cal = np.sqrt(cal_unc**2 + cp_b_uncert**2  + (drift_unc*a_ql)**2 )# + a_axis_unc**2)
             uncert = np.sqrt(ratio**2 * ((a_uncert_cal/a_ql)**2 + (cp_b_uncert_cal/cp_b_ql)**2))
             shape = 'o'
 
@@ -1361,14 +1412,27 @@ def plot_ratios(fin, dets, cwd, p_dir, pulse_shape, plot_fit_ratio, bl_only, sav
                     cp_b_uncert = cp_b_axes_df.abs_uncert.iloc[np.where(cp_b_axes_df.det == det)].values
                     cp_b_fit_ql = cp_b_axes_df.fit_ql.iloc[np.where(cp_b_axes_df.det == det)].values
                     rat = a_ql/cp_b_ql
+                    # old uncerts
+                    # if pulse_shape:
+                    #     a_ql_val = a_axis_df.ql_vals.iloc[np.where(a_axis_df.det == det)].values
+                    #     cp_b_ql_val = cp_b_axes_df.ql_vals.iloc[np.where(cp_b_axes_df.det == det)].values
+                    #     a_uncert_cal = np.sqrt((cal_unc[d]/a_ql_val*a_ql)**2 + ps_unc[d]**2 + (0.005*a_ql)**2)
+                    #     cp_b_uncert_cal = np.sqrt((cal_unc[d]/cp_b_ql_val*cp_b_ql)**2 + ps_unc[d]**2 + (0.005*cp_b_ql)**2)
+                    # else:
+                    #     a_uncert_cal = np.sqrt(cal_unc[d]**2 + a_uncert**2 + (0.005*a_ql)**2)
+                    #     cp_b_uncert_cal = np.sqrt(cal_unc[d]**2 + cp_b_uncert**2 + (0.005*cp_b_ql)**2)
+
                     if pulse_shape:
                         a_ql_val = a_axis_df.ql_vals.iloc[np.where(a_axis_df.det == det)].values
                         cp_b_ql_val = cp_b_axes_df.ql_vals.iloc[np.where(cp_b_axes_df.det == det)].values
-                        a_uncert_cal = np.sqrt((cal_unc[d]/a_ql_val*a_ql)**2 + ps_unc[d]**2 + (0.005*a_ql)**2)
-                        cp_b_uncert_cal = np.sqrt((cal_unc[d]/cp_b_ql_val*cp_b_ql)**2 + ps_unc[d]**2 + (0.005*cp_b_ql)**2)
+                        a_uncert_cal = np.sqrt((cal_unc[d]/a_ql_val*a_ql)**2 + ps_unc[d]**2 #+ (0.005*a_ql[d])**2 
+                                            + (a_axis_unc[d]/a_ql_val*a_ql)**2 + (drift_unc*a_ql)**2) # note: a_ql is psp, a_ql_val is a-axis LO (used to ge % uncerts)
+                        cp_b_uncert_cal = np.sqrt((cal_unc[d]/cp_b_ql_val*cp_b_ql)**2 + ps_unc[d]**2 #+ (0.005*cp_b_ql)**2 
+                                               + (a_axis_unc[d]/cp_b_ql_val*cp_b_ql)**2 + (drift_unc*cp_b_ql)**2)
                     else:
-                        a_uncert_cal = np.sqrt(cal_unc[d]**2 + a_uncert**2 + (0.005*a_ql)**2)
-                        cp_b_uncert_cal = np.sqrt(cal_unc[d]**2 + cp_b_uncert**2 + (0.005*cp_b_ql)**2)
+                        #print cal_unc[d], a_uncert[d], a_ql[d], a_axis_unc[d], drift_unc
+                        a_uncert_cal = np.sqrt(cal_unc[d]**2 + a_uncert**2 + a_axis_unc[d]**2 + (drift_unc*a_ql)**2)
+                        cp_b_uncert_cal = np.sqrt(cal_unc[d]**2 + cp_b_uncert**2 + a_axis_unc[d]**2 + (drift_unc*cp_b_ql)**2)
 
                     unc = np.sqrt(rat**2 * ((a_uncert_cal/a_ql)**2 + (cp_b_uncert_cal/cp_b_ql)**2)) # no baseline uncert
                     rat_fit = a_fit_ql/cp_b_fit_ql
@@ -1661,7 +1725,7 @@ def adc_vs_cal_ratios(fin, dets, cwd, p_dir, plot_fit_ratio):
 
     plt.show()
 
-def plot_acp_lo_curves(fin, dets, cwd, p_dir, pulse_shape, bl_only, plot_fit_data, smoothed_data):
+def plot_acp_lo_curves(fin, dets, cwd, p_dir, pulse_shape, bl_only, plot_fit_data, smoothed_data, save_pickle):
     ''' plot light ouput curves of major axes
         includes function to remove calibration for checking true shape
     '''
@@ -1705,6 +1769,13 @@ def plot_acp_lo_curves(fin, dets, cwd, p_dir, pulse_shape, bl_only, plot_fit_dat
         label = [', b-vert', ', c\'-vert',  '', '']
         a_axis = ['a-axis', 'a-axis', '', '']
         cp_b_axis = ['cp-axis', 'b-axis', '', '']
+
+        # uncert measured with a-axis, uncert due to PMT drift
+        a_axis_unc_bvert11, a_axis_unc_cpvert11, a_axis_unc_bvert4, a_axis_unc_cpvert4 = pickle.load( open(p_dir + 'a_axis_lo_stds.p', 'rb')) # MeVee, from compare_a_axis_recoils
+        #               b11      cp11     b4     cp4
+        #drift_uncs =  (0.0085, 0.0113, 0.0027, 0.0055) # percent, from /home/radians/raweldon/tunl.2018.1_analysis/stilbene_final/lo_calibration/cal_and_temp_changes.py
+        drift_uncs =  (0.015, 0.015, 0.0027, 0.0055) #0.015 accounts for 3% separation (lack of aging)
+
         if '11' in f:
             beam_11MeV = True
             angles = [70, 60, 50, 40, 30, 20, 20, 30, 40, 50, 60, 70]
@@ -1742,11 +1813,15 @@ def plot_acp_lo_curves(fin, dets, cwd, p_dir, pulse_shape, bl_only, plot_fit_dat
                 cal_476 = remove_cal(0.476, m, b)
                 new_m = 8750
                 new_m_diff_bvert = (m - new_m)/(m + new_m)*200 
+                a_axis_unc = np.array(a_axis_unc_bvert11)
+                drift_unc = drift_uncs[0]
             if '4MeV' in f:
                 m = 25868.35
                 b = -544.24
                 cal_476 = remove_cal(0.476, m, b)
                 new_m = m
+                a_axis_unc = a_axis_unc_bvert4
+                drift_unc = drift_uncs[2]
         else:
             #tilts = [0, 30, -30, 15, -15]
             tilts = [0]
@@ -1758,11 +1833,15 @@ def plot_acp_lo_curves(fin, dets, cwd, p_dir, pulse_shape, bl_only, plot_fit_dat
                 cal_476 = remove_cal(0.476, m, b)
                 new_m = 8550
                 new_m_diff_cpvert = (m - new_m)/(m + new_m)*200 
+                a_axis_unc = np.array(a_axis_unc_cpvert11)
+                drift_unc = drift_uncs[1]
             if '4MeV' in f:
                 m = 26593.35
                 b = -534.64
                 cal_476 = remove_cal(0.476, m, b)
                 new_m = m
+                a_axis_unc = a_axis_unc_cpvert4
+                drift_unc = drift_uncs[3]
 
         data = pd_load(f, p_dir)
         data = split_filenames(data)  
@@ -1783,11 +1862,12 @@ def plot_acp_lo_curves(fin, dets, cwd, p_dir, pulse_shape, bl_only, plot_fit_dat
             if pulse_shape:
                 a_ql_vals = a_axis_df.ql_vals.iloc[np.where(a_axis_df.tilt == 0)].values
                 cp_b_ql_vals = cp_b_axes_df.ql_vals.iloc[np.where(cp_b_axes_df.tilt == 0)].values
-                a_uncert_cal = np.sqrt((cal_unc/a_ql_vals*a_ql)**2 + ps_unc**2 + (0.005*a_ql)**2)
-                cp_b_uncert_cal = np.sqrt((cal_unc/cp_b_ql_vals*cp_b_ql)**2 + cp_b_uncert**2 + (0.005*cp_b_ql)**2)
+                a_uncert_cal = np.sqrt((cal_unc/a_ql_vals*a_ql)**2 + ps_unc**2 + (0.005*a_ql)**2 + (a_axis_unc/a_ql_vals*a_ql)**2 
+                                        + (drift_unc*a_ql)**2) # note: a_ql is psp, a_ql_val is a-axis LO (used to ge % uncerts)
+                cp_b_uncert_cal = np.sqrt((cal_unc/cp_b_ql_vals*cp_b_ql)**2 + cp_b_uncert**2 + (0.005*cp_b_ql)**2 + (a_axis_unc/cp_b_ql_vals*cp_b_ql)**2 + (drift_unc*cp_b_ql)**2)
             else:
-                a_uncert_cal = np.sqrt(cal_unc**2 + a_uncert**2 + (0.005*a_ql)**2)
-                cp_b_uncert_cal = np.sqrt(cal_unc**2 + cp_b_uncert**2 + (0.005*cp_b_ql)**2)
+                a_uncert_cal = np.sqrt(cal_unc**2 + a_uncert**2 + (0.005*a_ql)**2 + a_axis_unc**2 + (drift_unc*a_ql)**2)
+                cp_b_uncert_cal = np.sqrt(cal_unc**2 + cp_b_uncert**2 + (0.005*cp_b_ql)**2 + a_axis_unc**2 + (drift_unc*a_ql)**2)
 
             if bl_only:
                 a_ql = a_ql[:6]
@@ -1810,9 +1890,10 @@ def plot_acp_lo_curves(fin, dets, cwd, p_dir, pulse_shape, bl_only, plot_fit_dat
                     a_counts.append(a_axis_df.counts.iloc[np.where(a_axis_df.det == det)].values)
                     if pulse_shape:
                         a_ql_val = a_axis_df.ql_vals.iloc[np.where(a_axis_df.det == det)].values
-                        a_uncert_cal.append(np.sqrt((cal_unc[d]/a_ql_val*a_ql[d])**2 + ps_unc[d]**2 + (0.005*a_ql[d])**2))
+                        a_uncert_cal.append(np.sqrt((cal_unc[d]/a_ql_val*a_ql[d])**2 + ps_unc[d]**2 + (0.005*a_ql[d])**2 
+                                            + (a_axis_unc[d]/a_ql_val*a_ql[d])**2 + (drift_unc*a_ql[d])**2)) # note: a_ql is psp, a_ql_val is a-axis LO (used to ge % uncerts)
                     else:
-                        a_uncert_cal.append(np.sqrt(cal_unc[d]**2 + a_uncert[d]**2 + (0.005*a_ql[d])**2))
+                        a_uncert_cal.append(np.sqrt(cal_unc[d]**2 + a_uncert[d]**2 + (0.005*a_ql[d])**2 + a_axis_unc[d]**2 + (drift_unc*a_ql[d])**2))
             for d, det in enumerate(cp_b_axes_df.det.values):
                     cp_b_ql.append(cp_b_axes_df.ql.iloc[np.where(cp_b_axes_df.det == det)].values)
                     cp_b_uncert.append(cp_b_axes_df.abs_uncert.iloc[np.where(cp_b_axes_df.det == det)].values)
@@ -1820,12 +1901,19 @@ def plot_acp_lo_curves(fin, dets, cwd, p_dir, pulse_shape, bl_only, plot_fit_dat
                     cp_b_counts.append(cp_b_axes_df.counts.iloc[np.where(cp_b_axes_df.det == det)].values)
                     if pulse_shape:
                         cp_b_ql_val = cp_b_axes_df.ql_vals.iloc[np.where(cp_b_axes_df.det == det)].values
-                        cp_b_uncert_cal.append(np.sqrt((cal_unc[d]/cp_b_ql_val*cp_b_ql[d])**2 + ps_unc[d]**2 + (0.005*cp_b_ql[d])**2))
+                        cp_b_uncert_cal.append(np.sqrt((cal_unc[d]/cp_b_ql_val*cp_b_ql[d])**2 + ps_unc[d]**2 + (0.005*cp_b_ql[d])**2 
+                                                        + (a_axis_unc[d]/cp_b_ql_val*cp_b_ql[d])**2 + (drift_unc*cp_b_ql[d])**2))
                     else:
-                        cp_b_uncert_cal.append(np.sqrt(cal_unc[d]**2 + cp_b_uncert[d]**2 + (0.005*cp_b_ql[d])**2))
+                        cp_b_uncert_cal.append(np.sqrt(cal_unc[d]**2 + cp_b_uncert[d]**2 + (0.005*cp_b_ql[d])**2 + a_axis_unc[d]**2 + (drift_unc*cp_b_ql[d])**2))
   
             a_ep_err = calc_ep_uncerts(a_counts, a_angles, a_dists, beam_11MeV, print_unc=False)
             cp_b_ep_err = calc_ep_uncerts(cp_b_counts, cp_b_angles, cp_b_dists, beam_11MeV, print_unc=False)
+
+        print '\n{:^10s} {:>10} {:>10} {:>10} {:>10} {:>11s} {:>12s}'.format('cal_unc', 'a_uncert', 'cal2_unc', 'a_axis_unc', 'drift_unc', 'total', 'rel_unc')
+        for a,b,c,d,e,z in zip(cal_unc, a_uncert, 0.005*np.array(a_ql), a_axis_unc, drift_unc*np.array(a_ql), a_ql):
+            print '{:^10.3f} {:>10.3f} {:>10.3f} {:>10.3f} {:>10.3f} {:>10.3f} {:>10.3f}%'.format(float(a), float(b), float(c), float(d), float(e), 
+                    np.sqrt(float(a)**2 + float(b)**2 + float(c)**2 + float(d)**2 + float(e)**2), 
+                    np.sqrt(float(a)**2 + float(b)**2 + float(c)**2 + float(d)**2 + float(e)**2)/float(z)*100)
 
         # record all vals to save for fitting data later
         all_vals.append(((list(a_p_erg), list(a_ql), list(a_uncert_cal), list(a_ep_err)), (list(cp_b_p_erg), list(cp_b_ql), list(cp_b_uncert_cal), list(cp_b_ep_err))))
@@ -1845,7 +1933,7 @@ def plot_acp_lo_curves(fin, dets, cwd, p_dir, pulse_shape, bl_only, plot_fit_dat
                 else:
                     a_erg = a_p_erg[:6]
                     cp_erg = cp_b_p_erg[-6:][::-1]
-                    print a_erg, a_smoothed
+                    #print a_erg, a_smoothed
                 plt.errorbar(a_erg, a_smoothed, ecolor='black', markerfacecolor='None', fmt=shape, 
                                 markeredgecolor='r', markeredgewidth=1, markersize=9, capsize=1, label= a_axis[i]+label[i])
                 plt.errorbar(cp_erg, cp_b_smoothed, ecolor='black', markerfacecolor='None', fmt=shape, 
@@ -1906,10 +1994,15 @@ def plot_acp_lo_curves(fin, dets, cwd, p_dir, pulse_shape, bl_only, plot_fit_dat
     print '\ncalibration percent diff for fig 2:'
     print 'bvert:', round(abs(new_m_diff_bvert),3), '%\ncpvert:', round(abs(new_m_diff_cpvert), 3), '%'
 
-    out = open( p_dir + 'lo_curve_vals.p', "wb" )
-    pickle.dump( all_vals, out)
-    out.close()
-    print 'pickle saved to ' + p_dir + 'lo_curve_vals.p'
+    if save_pickle:
+        if pulse_shape:
+            out = open( p_dir + 'psp_curve_vals.p', "wb" )
+            print 'pickle saved to ' + p_dir + 'psp_curve_vals.p'
+        else:
+            out = open( p_dir + 'lo_curve_vals.p', "wb" )
+            print 'pickle saved to ' + p_dir + 'lo_curve_vals.p'
+        pickle.dump( all_vals, out)
+        out.close()
 
     plt.show()
 
@@ -1917,6 +2010,7 @@ def acp_lo_curves_fits(fin, dets, cwd, p_dir, match_data, plot_meas_data, plot_s
     ''' match_data = True applies scaling factor to cpvert and bvert data to correct disagreement
         cpvert LO is systematically lower than bvert (may be due to crystal alignment in detector housing or issues with PMT)
         pickles from output of plot_acp_lo_curves
+        Prints BL BR relative difference with match_data=False and meas_data=True
     '''
 
     def fit(E_p, a, b, c, d, e):
@@ -1924,7 +2018,8 @@ def acp_lo_curves_fits(fin, dets, cwd, p_dir, match_data, plot_meas_data, plot_s
 
     def get_smoothed_data(dets):
         ql_maxs, ql_mins = [], []
-        sin_fits = ('bvert_11MeV_sin_params_smoothed.p', 'cpvert_11MeV_sin_params_smoothed.p', 'bvert_4MeV_sin_params_smoothed.p', 'cpvert_4MeV_sin_params_smoothed.p')
+        #sin_fits = ('bvert_11MeV_sin_params_smoothed.p', 'cpvert_11MeV_sin_params_smoothed.p', 'bvert_4MeV_sin_params_smoothed.p', 'cpvert_4MeV_sin_params_smoothed.p')
+        sin_fits = ('bvert_11MeV_sin_params_smoothed_new.p', 'cpvert_11MeV_sin_params_smoothed_new.p', 'bvert_4MeV_sin_params_smoothed_new.p', 'cpvert_4MeV_sin_params_smoothed_new.p')
         for s in sin_fits:
             data = pd_load(s, p_dir)
             ql_max, ql_min = [], []
@@ -1942,6 +2037,7 @@ def acp_lo_curves_fits(fin, dets, cwd, p_dir, match_data, plot_meas_data, plot_s
             ql_mins.append(ql_min)                              
         return ql_maxs, ql_mins
 
+
     with open(p_dir + 'lo_curve_vals.p', 'r') as f:
         data = pd.read_pickle(f)
 
@@ -1950,7 +2046,7 @@ def acp_lo_curves_fits(fin, dets, cwd, p_dir, match_data, plot_meas_data, plot_s
     fig = plt.figure(0, figsize=(12,9))
     ax = fig.add_subplot(111)
     if not log_plot:
-        axins = zoomed_inset_axes(ax, zoom=7, loc=4,  bbox_to_anchor=(0.95,0.03), bbox_transform=ax.transAxes)
+        axins = zoomed_inset_axes(ax, zoom=8, loc=4,  bbox_to_anchor=(0.96, 0.04), bbox_transform=ax.transAxes)
 
     # extract data (shitty)
     a_p_erg_bvert11, a_ql_bvert11, a_uncert_cal_bvert11, a_ep_err_bvert11 = data[0][0]
@@ -2005,12 +2101,13 @@ def acp_lo_curves_fits(fin, dets, cwd, p_dir, match_data, plot_meas_data, plot_s
     for a, b, c, d, in zip(b_p_erg, b_ql, b_uncert_cal, b_ep_err):
         print '{:^8.3f} {:>8.3f} {:>8.3f} {:>8.3f}'.format(float(a), float(b), float(c), float(d))
 
+    xvals = np.linspace(0, 12, 1000)
     if plot_meas_data:
         if not plot_smoothed_data:
             # exponential fit
             exp_model = lmfit.Model(fit)
             params = exp_model.make_params(a=0.75, b=2.6, c=0.25, d=1, e=1)
-            params['d'].vary = False
+            params['d'].vary = True
             params['e'].vary = False
             res_a_bvert = exp_model.fit(a_ql_bvert, params, E_p=a_p_erg_bvert)
             res_a_cpvert = exp_model.fit(a_ql_cpvert, params, E_p=a_p_erg_cpvert)
@@ -2026,8 +2123,7 @@ def acp_lo_curves_fits(fin, dets, cwd, p_dir, match_data, plot_meas_data, plot_s
             print '\n', res_b.message
             print lmfit.fit_report(res_b, show_correl=True)
 
-            # analyze systematic uncert effect on the light output
-            xvals = np.linspace(0, 10, 1000)
+            # analyze systematic uncert effect (uncert due to detector positions) on the light output
             uncerts_11 = [0.043, 0.06, 0.068, 0.068, 0.058, 0.043]
             uncerts_4 = [0.026, 0.03, 0.032, 0.03, 0.025, 0.018]
             print '\n\n{:^8s} {:^8s} {:^8s} {:^10s}'.format('E_p', 'LO', 'LO-sig_lo', 'rel_diff') 
@@ -2065,63 +2161,87 @@ def acp_lo_curves_fits(fin, dets, cwd, p_dir, match_data, plot_meas_data, plot_s
  
     if plot_smoothed_data:
         max_smoothed, min_smoothed = get_smoothed_data(dets)
-        a_bvert_smoothed = max_smoothed[0] + max_smoothed[2]
-        a_cpvert_smoothed = max_smoothed[1] + max_smoothed[3]
-        b_smoothed = min_smoothed[1] + min_smoothed[3][::-1]
-        cp_smoothed = min_smoothed[0] + min_smoothed[2][::-1]
+
+        #a_bvert_smoothed = max_smoothed[0] + max_smoothed[2]
+        #a_cpvert_smoothed = max_smoothed[1] + max_smoothed[3]
+        #b_smoothed = min_smoothed[1] + min_smoothed[3][::-1]
+        #cp_smoothed = min_smoothed[0] + min_smoothed[2][::-1]
+
+        # scale low gain data to high gain data
+        a_bvert_smoothed = max_smoothed[0] + [x*max_smoothed[0][4]/max_smoothed[2][2] for x in max_smoothed[2]]
+        a_cpvert_smoothed = max_smoothed[1] + [x*max_smoothed[1][4]/max_smoothed[3][2] for x in max_smoothed[3]]
+        b_smoothed = min_smoothed[1] + [x*min_smoothed[1][4]/min_smoothed[3][::-1][3] for x in min_smoothed[3][::-1]]
+        cp_smoothed = min_smoothed[0] + [x*min_smoothed[0][4]/min_smoothed[2][::-1][3] for x in min_smoothed[2][::-1]]
+
+        print max_smoothed[0][4], max_smoothed[2][2], max_smoothed[0][4]/max_smoothed[2][2]
+        print max_smoothed[1][4], max_smoothed[3][2], max_smoothed[1][4]/max_smoothed[3][2]
+        print min_smoothed[1][4], min_smoothed[3][::-1][3], min_smoothed[1][4]/min_smoothed[3][::-1][3]
+        print min_smoothed[0][4], min_smoothed[2][::-1][3], min_smoothed[0][4]/min_smoothed[2][::-1][3]
+
+        # remove second 2.83 MeV measurement
+        del a_bvert_smoothed[4]; del b_smoothed[4]; del cp_smoothed[4]
+        del a_uncert_cal_bvert[4]; del cp_uncert_cal[4]; del b_uncert_cal[4]
+        del a_ep_err_bvert[4]; del cp_ep_err[4]; del b_ep_err[4]
+        del a_p_erg_bvert[4]; del cp_p_erg[4]
 
         # exponential fit
         exp_model = lmfit.Model(fit)
         params = exp_model.make_params(a=0.75, b=2.6, c=0.25, d=1, e=1)
-        #params['d'].vary = False
+        params['d'].vary = True
         params['e'].vary = False
         res_a_bvert = exp_model.fit(a_bvert_smoothed, params, E_p=a_p_erg_bvert)
-        res_a_cpvert = exp_model.fit(a_cpvert_smoothed, params, E_p=a_p_erg_cpvert)
         res_cp = exp_model.fit(cp_smoothed, params, E_p=cp_p_erg)
-        res_b = exp_model.fit(b_smoothed, params, E_p=b_p_erg)
+        res_b = exp_model.fit(b_smoothed, params, E_p=cp_p_erg)
 
         print '\n', res_a_bvert.message
         print lmfit.fit_report(res_a_bvert, show_correl=True)
-        print '\n', res_a_cpvert.message
-        print lmfit.fit_report(res_a_cpvert, show_correl=True)
         print '\n', res_cp.message
         print lmfit.fit_report(res_cp, show_correl=True)
         print '\n', res_b.message
         print lmfit.fit_report(res_b, show_correl=True)
 
-        ax.errorbar(a_p_erg_cpvert, a_bvert_smoothed, yerr=[np.sqrt((0.015*a)**2 + unc**2) for a, unc in zip(a_bvert_smoothed, a_uncert_cal_bvert)], xerr=a_ep_err_cpvert, 
-                     ecolor='black', markerfacecolor='None', fmt='<', markeredgecolor='r', markeredgewidth=1, markersize=9, capsize=1, label='a-axis, crystal 1, smoothed')
-        ax.errorbar(a_p_erg_cpvert, a_cpvert_smoothed, yerr=[np.sqrt((0.015*a)**2 + unc**2) for a, unc in zip(a_cpvert_smoothed, a_uncert_cal_cpvert)], xerr=a_ep_err_cpvert, 
-                     ecolor='black', markerfacecolor='None', fmt='>', markeredgecolor='r', markeredgewidth=1, markersize=9, capsize=1, label='a-axis, crystal 3, smoothed')
-        ax.errorbar(cp_p_erg, cp_smoothed, yerr=[np.sqrt((0.015*a)**2 + unc**2) for a, unc in zip(cp_smoothed, cp_uncert_cal)], xerr=cp_ep_err, 
-                     ecolor='black', markerfacecolor='None', fmt='d', markeredgecolor='g', markeredgewidth=1, markersize=9, capsize=1, label='c\'-axis, crystal 1, smoothed')
-        ax.errorbar(b_p_erg, b_smoothed, yerr=[np.sqrt((0.015*a)**2 + unc**2) for a, unc in zip(b_smoothed, b_uncert_cal)], xerr=b_ep_err, 
-                     ecolor='black', markerfacecolor='None', fmt='*', markeredgecolor='b', markeredgewidth=1, markersize=9, capsize=1, label='b-axis, crystal 3, smoothed') 
+        # include bvert-cpvert crystal uncerts for low gain data
+        ## only low gain data
+        #yerr_a_bvert = [np.sqrt((0.015*a)**2 + unc**2) for a, unc in zip(a_bvert_smoothed[:6], a_uncert_cal_bvert[:6])] + a_uncert_cal_bvert[6:]
+        #yerr_a_cpvert = [np.sqrt((0.015*a)**2 + unc**2) for a, unc in zip(a_bvert_smoothed[:6], a_uncert_cal_bvert[:6])] + a_uncert_cal_cpvert[6:]
+        #yerr_cp = [np.sqrt((0.015*a)**2 + unc**2) for a, unc in zip(cp_smoothed[:6], cp_uncert_cal[:6])] + cp_uncert_cal[6:]
+        #yerr_b = [np.sqrt((0.015*a)**2 + unc**2) for a, unc in zip(b_smoothed[:6], b_uncert_cal[:6])] + b_uncert_cal[6:]
+
+        # all data
+        #yerr_a_bvert = [np.sqrt((0.015*a)**2 + unc**2) for a, unc in zip(a_bvert_smoothed, a_uncert_cal_bvert)] 
+        #yerr_a_cpvert = [np.sqrt((0.015*a)**2 + unc**2) for a, unc in zip(a_bvert_smoothed, a_uncert_cal_bvert)]
+        #yerr_cp = [np.sqrt((0.015*a)**2 + unc**2) for a, unc in zip(cp_smoothed, cp_uncert_cal)] 
+        #yerr_b = [np.sqrt((0.015*a)**2 + unc**2) for a, unc in zip(b_smoothed, b_uncert_cal)] 
+
+        ax.errorbar(a_p_erg_bvert, a_bvert_smoothed, yerr=a_uncert_cal_bvert, xerr=a_ep_err_bvert, 
+                     ecolor='black', markerfacecolor='None', fmt='^', markeredgecolor='r', markeredgewidth=1, markersize=9, capsize=1, label='a-axis')
+        ax.errorbar(cp_p_erg, b_smoothed, yerr=b_uncert_cal, xerr=b_ep_err, 
+                     ecolor='black', markerfacecolor='None', fmt='o', markeredgecolor='b', markeredgewidth=1, markersize=9, capsize=1, label='b-axis') 
+        ax.errorbar(cp_p_erg, cp_smoothed, yerr=cp_uncert_cal, xerr=cp_ep_err, 
+                     ecolor='black', markerfacecolor='None', fmt='s', markeredgecolor='g', markeredgewidth=1, markersize=9, capsize=1, label='c\'-axis')
+
 
         # plot exponential fits
-        xvals = np.linspace(0, 10, 1000)
         ax.plot(xvals, fit(xvals, res_a_bvert.params['a'], res_a_bvert.params['b'], res_a_bvert.params['c'], res_a_bvert.params['d'], res_a_bvert.params['e']), 'r', alpha=0.5)
-        ax.plot(xvals, fit(xvals, res_a_cpvert.params['a'], res_a_cpvert.params['b'], res_a_cpvert.params['c'], res_a_cpvert.params['d'], res_a_cpvert.params['e']), 'r--', alpha=0.5)
         ax.plot(xvals, fit(xvals, res_cp.params['a'], res_cp.params['b'], res_cp.params['c'], res_cp.params['d'], res_cp.params['e']), 'g', alpha=0.5)
         ax.plot(xvals, fit(xvals, res_b.params['a'], res_b.params['b'], res_b.params['c'], res_b.params['d'], res_b.params['e']), 'b', alpha=0.5)
 
         if not log_plot:
-            axins.errorbar(a_p_erg_cpvert, a_bvert_smoothed, yerr=[np.sqrt((0.015*a)**2 + unc**2) for a, unc in zip(a_bvert_smoothed, a_uncert_cal_bvert)], xerr=a_ep_err_cpvert, 
-                        ecolor='black', markerfacecolor='None', fmt='<', markeredgecolor='r', markeredgewidth=1, markersize=9, capsize=1, elinewidth=0.5, barsabove=False)
-            axins.errorbar(a_p_erg_cpvert, a_cpvert_smoothed, yerr=[np.sqrt((0.015*a)**2 + unc**2) for a, unc in zip(a_cpvert_smoothed, a_uncert_cal_cpvert)], xerr=a_ep_err_cpvert, 
-                        ecolor='black', markerfacecolor='None', fmt='>', markeredgecolor='r', markeredgewidth=1, markersize=9, capsize=1, elinewidth=0.5, barsabove=False)
-            axins.errorbar(cp_p_erg, cp_smoothed, yerr=[np.sqrt((0.015*a)**2 + unc**2) for a, unc in zip(cp_smoothed, cp_uncert_cal)], xerr=cp_ep_err, 
-                        ecolor='black', markerfacecolor='None', fmt='d', markeredgecolor='g', markeredgewidth=1, markersize=9, capsize=1, elinewidth=0.5, barsabove=False)
-            axins.errorbar(b_p_erg, b_smoothed, yerr=[np.sqrt((0.015*a)**2 + unc**2) for a, unc in zip(b_smoothed, b_uncert_cal)], xerr=b_ep_err, 
-                        ecolor='black', markerfacecolor='None', fmt='*', markeredgecolor='b', markeredgewidth=1, markersize=9, capsize=1, elinewidth=0.5, barsabove=False)
+            axins.errorbar(a_p_erg_bvert, a_bvert_smoothed, yerr=a_uncert_cal_bvert, xerr=a_ep_err_bvert, 
+                        ecolor='black', markerfacecolor='None', fmt='^', markeredgecolor='r', markeredgewidth=1, markersize=9, capsize=1, elinewidth=0.5, barsabove=False)
+            axins.errorbar(cp_p_erg, cp_smoothed, yerr=cp_uncert_cal, xerr=cp_ep_err, 
+                        ecolor='black', markerfacecolor='None', fmt='s', markeredgecolor='g', markeredgewidth=1, markersize=9, capsize=1, elinewidth=0.5, barsabove=False)
+            axins.errorbar(cp_p_erg, b_smoothed, yerr=b_uncert_cal, xerr=b_ep_err, 
+                        ecolor='black', markerfacecolor='None', fmt='o', markeredgecolor='b', markeredgewidth=1, markersize=9, capsize=1, elinewidth=0.5, barsabove=False)
 
     if not log_plot:
-        axins.plot(xvals, fit(xvals, res_a_bvert.params['a'], res_a_bvert.params['b'], res_a_bvert.params['c'], res_a_bvert.params['d']), 'r', alpha=0.5)
-        axins.plot(xvals, fit(xvals, res_a_cpvert.params['a'], res_a_cpvert.params['b'], res_a_cpvert.params['c'], res_a_cpvert.params['d']), 'r--', alpha=0.5)
-        axins.plot(xvals, fit(xvals, res_cp.params['a'], res_cp.params['b'], res_cp.params['c'], res_cp.params['d']), 'g', alpha=0.5)
-        axins.plot(xvals, fit(xvals, res_b.params['a'], res_b.params['b'], res_b.params['c'], res_b.params['d']), 'b', alpha=0.5)
-        axins.set_xlim(2.67, 2.99)
-        axins.set_ylim(0.63, 0.98)
+        axins.plot(xvals, fit(xvals, res_a_bvert.params['a'], res_a_bvert.params['b'], res_a_bvert.params['c'], res_a_bvert.params['d'], res_a_bvert.params['e']), 'r', alpha=0.5)
+        if plot_meas_data:
+            axins.plot(xvals, fit(xvals, res_a_cpvert.params['a'], res_a_cpvert.params['b'], res_a_cpvert.params['c'], res_a_cpvert.params['d'], res_a_bvert.params['e']), 'r--', alpha=0.5)
+        axins.plot(xvals, fit(xvals, res_cp.params['a'], res_cp.params['b'], res_cp.params['c'], res_cp.params['d'], res_a_bvert.params['e']), 'g', alpha=0.5)
+        axins.plot(xvals, fit(xvals, res_b.params['a'], res_b.params['b'], res_b.params['c'], res_b.params['d'], res_a_bvert.params['e']), 'b', alpha=0.5)
+        axins.set_xlim(2.66, 3.0)
+        axins.set_ylim(0.64, 0.97)
 
         axins.locator_params(nbins=4)
         #axins.set_xticklabels()
@@ -2145,7 +2265,223 @@ def acp_lo_curves_fits(fin, dets, cwd, p_dir, match_data, plot_meas_data, plot_s
     plt.tight_layout()
 
     if save_plots:
-        plt.savefig(cwd + '/figures/lo_curves_smoothed_only.pdf')
+        plt.savefig(cwd + '/figures/lo_curves_smoothed_only_log.pdf')
+    plt.show()
+
+def acp_psp_curves_fits(fin, dets, cwd, p_dir, match_data, plot_meas_data, plot_smoothed_data, log_plot, save_plots):
+    ''' match_data = True applies scaling factor to cpvert and bvert data to correct disagreement
+        cpvert LO is systematically lower than bvert (may be due to crystal alignment in detector housing or issues with PMT)
+        pickles from output of plot_acp_lo_curves
+    '''
+
+    def fit(E_p, m, b):
+        return m*E_p + b
+
+    def get_smoothed_data(dets):
+        ql_maxs, ql_mins = [], []
+        sin_fits = ('bvert_11MeV_sin_params_smoothed_ps.p', 'cpvert_11MeV_sin_params_smoothed_ps.p', 'bvert_4MeV_sin_params_smoothed_ps.p', 'cpvert_4MeV_sin_params_smoothed_ps.p')
+        for s in sin_fits:
+            data = pd_load(s, p_dir)
+            ql_max, ql_min = [], []
+            for d, det in enumerate(dets):
+                if d > 5:
+                    continue
+                det_df = data.loc[(data.det == det)]
+            
+                tilt_df = det_df.loc[(data.tilt == 0)]
+                angles = np.arange(0, 180, 5) # 5 and 2 look good
+                ql = sin_func(np.deg2rad(angles), tilt_df['a'].values, tilt_df['b'].values, tilt_df['phi'].values)
+                ql_max.append(max(ql))
+                ql_min.append(min(ql)) 
+            ql_maxs.append(ql_max)
+            ql_mins.append(ql_min)                              
+        return ql_maxs, ql_mins
+
+    with open(p_dir + 'psp_curve_vals.p', 'r') as f:
+        data = pd.read_pickle(f)
+
+    data = pd.DataFrame(data).transpose()
+
+    fig = plt.figure(1, figsize=(12,9))
+    ax = fig.add_subplot(111)
+    #if not log_plot:
+    #    axins = zoomed_inset_axes(ax, zoom=8, loc=4,  bbox_to_anchor=(0.96, 0.04), bbox_transform=ax.transAxes)
+
+    # extract data (shitty)
+    a_p_erg_bvert11, a_ql_bvert11, a_uncert_cal_bvert11, a_ep_err_bvert11 = data[0][0]
+    cp_p_erg_11, cp_ql_11, cp_uncert_cal_11, cp_ep_err_11 = data[0][1] 
+    a_p_erg_cpvert11, a_ql_cpvert11, a_uncert_cal_cpvert11, a_ep_err_cpvert11 = data[1][0]
+    b_p_erg_11, b_ql_11, b_uncert_cal_11, b_ep_err_11 = data[1][1] 
+    a_p_erg_bvert4, a_ql_bvert4, a_uncert_cal_bvert4, a_ep_err_bvert4 = data[2][0]
+    cp_p_erg_4, cp_ql_4, cp_uncert_cal_4, cp_ep_err_4 = data[2][1] 
+    a_p_erg_cpvert4, a_ql_cpvert4, a_uncert_cal_cpvert4, a_ep_err_cpvert4 = data[3][0]
+    b_p_erg_4, b_ql_4, b_uncert_cal_4, b_ep_err_4 = data[3][1] 
+
+    # clean bvert cpvert data before fit
+    if match_data:
+        a_ql_bvert11 = [x - x*0.015 for x in a_ql_bvert11]
+        cp_ql_11 = [x - x*0.015 for x in cp_ql_11]
+        a_ql_cpvert11 = [x + x*0.015 for x in a_ql_cpvert11]
+        b_ql_11 = [x + x*0.015 for x in b_ql_11]
+
+    a_p_erg_bvert = a_p_erg_bvert11 + a_p_erg_bvert4[:-3]
+    a_ql_bvert = a_ql_bvert11 + a_ql_bvert4[:-3]
+    a_uncert_cal_bvert = a_uncert_cal_bvert11 + a_uncert_cal_bvert4[:-3]
+    a_ep_err_bvert = a_ep_err_bvert11 + a_ep_err_bvert4[:-3]
+
+    a_p_erg_cpvert = a_p_erg_cpvert11 + a_p_erg_cpvert4[:-3]
+    a_ql_cpvert = a_ql_cpvert11 + a_ql_cpvert4[:-3]
+    a_uncert_cal_cpvert = a_uncert_cal_cpvert11 + a_uncert_cal_cpvert4[:-3]
+    a_ep_err_cpvert = a_ep_err_cpvert11 + a_ep_err_cpvert4[:-3]
+
+    cp_p_erg = cp_p_erg_11 + cp_p_erg_4[3:]
+    cp_ql = cp_ql_11 + cp_ql_4[3:]
+    cp_uncert_cal = cp_uncert_cal_11 + cp_uncert_cal_4[3:]
+    cp_ep_err = cp_ep_err_11 + cp_ep_err_4[3:]
+
+    b_p_erg = b_p_erg_11 + b_p_erg_4[3:]
+    b_ql = b_ql_11 + b_ql_4[3:]
+    b_uncert_cal = b_uncert_cal_11 + b_uncert_cal_4[3:]
+    b_ep_err = b_ep_err_11 + b_ep_err_4[3:]
+
+    print '\na_bvert\n   Ep       LO      sig_lo   sig_ep'
+    for a, b, c, d, in zip(a_p_erg_bvert, a_ql_bvert, a_uncert_cal_bvert, a_ep_err_bvert):
+        print '{:^8.3f} {:>8.3f} {:>8.3f} {:>8.3f}'.format(float(a), float(b), float(c), float(d))
+
+    print '\na_cpvert\n   Ep       LO      sig_lo   sig_ep'
+    for a, b, c, d, in zip(a_p_erg_cpvert, a_ql_cpvert, a_uncert_cal_cpvert, a_ep_err_cpvert):
+        print '{:^8.3f} {:>8.3f} {:>8.3f} {:>8.3f}'.format(float(a), float(b), float(c), float(d))
+
+    print '\ncp\n   Ep       LO      sig_lo   sig_ep'
+    for a, b, c, d, in zip(cp_p_erg, cp_ql, cp_uncert_cal, cp_ep_err):
+        print '{:^8.3f} {:>8.3f} {:>8.3f} {:>8.3f}'.format(float(a), float(b), float(c), float(d))
+
+    print '\nb\n   Ep       LO      sig_lo   sig_ep'
+    for a, b, c, d, in zip(b_p_erg, b_ql, b_uncert_cal, b_ep_err):
+        print '{:^8.3f} {:>8.3f} {:>8.3f} {:>8.3f}'.format(float(a), float(b), float(c), float(d))
+
+    xvals = np.linspace(0, 11, 1000)
+    if plot_meas_data:
+        if not plot_smoothed_data:
+            # linear fit
+            exp_model = lmfit.Model(fit)
+            params = exp_model.make_params(m=-0.1, b=0.4)
+            res_a_bvert = exp_model.fit(a_ql_bvert[:6] + a_ql_bvert[7:], params, E_p=a_p_erg_bvert[:6] + a_p_erg_bvert[7:])
+            res_a_cpvert = exp_model.fit(a_ql_cpvert[:6] + a_ql_cpvert[7:], params, E_p=a_p_erg_cpvert[:6] + a_p_erg_cpvert[7:])
+            res_cp = exp_model.fit(cp_ql[:6] + cp_ql[7:], params, E_p=cp_p_erg[:6] + cp_p_erg[7:])
+            res_b = exp_model.fit(b_ql[:6] + b_ql[7:], params, E_p=b_p_erg[:6] + b_p_erg[7:])
+
+            # print '\n', res_a_bvert.message
+            print lmfit.fit_report(res_a_bvert, show_correl=True)
+            print '\n', res_a_cpvert.message
+            print lmfit.fit_report(res_a_cpvert, show_correl=True)
+            print '\n', res_cp.message
+            print lmfit.fit_report(res_cp, show_correl=True)
+            print '\n', res_b.message
+            print lmfit.fit_report(res_b, show_correl=True)
+
+            # measured data
+            ax.errorbar(a_p_erg_bvert, a_ql_bvert, yerr=a_uncert_cal_bvert, xerr=a_ep_err_bvert, ecolor='black', markerfacecolor='None', fmt='^', 
+                           markeredgecolor='r', markeredgewidth=1, markersize=9, capsize=1, label= 'a-axis, crystal 1, measured')
+            ax.errorbar(a_p_erg_cpvert, a_ql_cpvert, yerr=a_uncert_cal_cpvert, xerr=a_ep_err_cpvert, ecolor='black', markerfacecolor='None', fmt='v', 
+                       markeredgecolor='r', markeredgewidth=1, markersize=9, capsize=1, label= 'a-axis, crystal 3, measured')
+            ax.errorbar(cp_p_erg, cp_ql, yerr=cp_uncert_cal, xerr=cp_ep_err, ecolor='black', markerfacecolor='None', fmt='s', 
+                           markeredgecolor='g', markeredgewidth=1, markersize=9, capsize=1, label='c\'-axis, crystal 1, measured')
+            ax.errorbar(b_p_erg, b_ql, yerr=b_uncert_cal, xerr=b_ep_err, ecolor='black', markerfacecolor='None', fmt='o', 
+                           markeredgecolor='b', markeredgewidth=1, markersize=9, capsize=1, label='b-axis, crystal 3, measured')
+
+            # plot linear fits
+            ax.plot(xvals, fit(xvals, res_a_bvert.params['m'], res_a_bvert.params['b']), 'r', alpha=0.5)
+            ax.plot(xvals, fit(xvals, res_a_cpvert.params['m'], res_a_cpvert.params['b']), 'r--', alpha=0.5)
+            ax.plot(xvals, fit(xvals, res_cp.params['m'], res_cp.params['b']), 'g', alpha=0.5)
+            ax.plot(xvals, fit(xvals, res_b.params['m'], res_b.params['b']), 'b', alpha=0.5)
+ 
+    if plot_smoothed_data:
+        max_smoothed, min_smoothed = get_smoothed_data(dets)
+        a_bvert_smoothed = max_smoothed[0] + max_smoothed[2]
+        a_cpvert_smoothed = max_smoothed[1] + max_smoothed[3]
+        b_smoothed = min_smoothed[1] + min_smoothed[3][::-1]
+        cp_smoothed = min_smoothed[0] + min_smoothed[2][::-1]
+
+        # linear fit
+        exp_model = lmfit.Model(fit)
+        params = exp_model.make_params(m=-0.1, b=0.4)
+        res_a_bvert = exp_model.fit(a_ql_bvert[:6] + a_ql_bvert[7:], params, E_p=a_p_erg_bvert[:6] + a_p_erg_bvert[7:])
+        res_a_cpvert = exp_model.fit(a_ql_cpvert[:6] + a_ql_cpvert[7:], params, E_p=a_p_erg_cpvert[:6] + a_p_erg_cpvert[7:])
+        res_cp = exp_model.fit(cp_ql[:6] + cp_ql[7:], params, E_p=cp_p_erg[:6] + cp_p_erg[7:])
+        res_b = exp_model.fit(b_ql[:6] + b_ql[7:], params, E_p=b_p_erg[:6] + b_p_erg[7:])
+
+        print '\n', res_a_bvert.message
+        print lmfit.fit_report(res_a_bvert, show_correl=True)
+        print '\n', res_a_cpvert.message
+        print lmfit.fit_report(res_a_cpvert, show_correl=True)
+        print '\n', res_cp.message
+        print lmfit.fit_report(res_cp, show_correl=True)
+        print '\n', res_b.message
+        print lmfit.fit_report(res_b, show_correl=True)
+
+        # include bvert-cpvert crystal uncerts for low gain data
+        yerr_a_bvert = [np.sqrt((0.015*a)**2 + unc**2) for a, unc in zip(a_bvert_smoothed[:6], a_uncert_cal_bvert[:6])] + a_uncert_cal_bvert[6:]
+        yerr_a_cpvert = [np.sqrt((0.015*a)**2 + unc**2) for a, unc in zip(a_bvert_smoothed[:6], a_uncert_cal_bvert[:6])] + a_uncert_cal_cpvert[6:]
+        yerr_cp = [np.sqrt((0.015*a)**2 + unc**2) for a, unc in zip(cp_smoothed[:6], cp_uncert_cal[:6])] + cp_uncert_cal[6:]
+        yerr_b = [np.sqrt((0.015*a)**2 + unc**2) for a, unc in zip(b_smoothed[:6], b_uncert_cal[:6])] + b_uncert_cal[6:]
+
+        ax.errorbar(a_p_erg_cpvert, a_bvert_smoothed, yerr=yerr_a_bvert, xerr=a_ep_err_cpvert, 
+                     ecolor='black', markerfacecolor='None', fmt='<', markeredgecolor='r', markeredgewidth=1, markersize=9, capsize=1, label='a-axis, crystal 1, smoothed')
+        ax.errorbar(a_p_erg_cpvert, a_cpvert_smoothed, yerr=yerr_a_cpvert, xerr=a_ep_err_cpvert, 
+                     ecolor='black', markerfacecolor='None', fmt='>', markeredgecolor='r', markeredgewidth=1, markersize=9, capsize=1, label='a-axis, crystal 3, smoothed')
+        ax.errorbar(cp_p_erg, cp_smoothed, yerr=yerr_cp, xerr=cp_ep_err, 
+                     ecolor='black', markerfacecolor='None', fmt='d', markeredgecolor='g', markeredgewidth=1, markersize=9, capsize=1, label='c\'-axis, crystal 1, smoothed')
+        ax.errorbar(b_p_erg, b_smoothed, yerr=yerr_b, xerr=b_ep_err, 
+                     ecolor='black', markerfacecolor='None', fmt='*', markeredgecolor='b', markeredgewidth=1, markersize=9, capsize=1, label='b-axis, crystal 3, smoothed') 
+
+        # plot linear fits
+        ax.plot(xvals, fit(xvals, res_a_bvert.params['m'], res_a_bvert.params['b']), 'r', alpha=0.5)
+        ax.plot(xvals, fit(xvals, res_a_cpvert.params['m'], res_a_cpvert.params['b']), 'r--', alpha=0.5)
+        ax.plot(xvals, fit(xvals, res_cp.params['m'], res_cp.params['b']), 'g', alpha=0.5)
+        ax.plot(xvals, fit(xvals, res_b.params['m'], res_b.params['b']), 'b', alpha=0.5)
+
+        # if not log_plot:
+        #     axins.errorbar(a_p_erg_cpvert, a_bvert_smoothed, yerr=yerr_a_bvert, xerr=a_ep_err_cpvert, 
+        #                 ecolor='black', markerfacecolor='None', fmt='<', markeredgecolor='r', markeredgewidth=1, markersize=9, capsize=1, elinewidth=0.5, barsabove=False)
+        #     axins.errorbar(a_p_erg_cpvert, a_cpvert_smoothed, yerr=yerr_a_cpvert, xerr=a_ep_err_cpvert, 
+        #                 ecolor='black', markerfacecolor='None', fmt='>', markeredgecolor='r', markeredgewidth=1, markersize=9, capsize=1, elinewidth=0.5, barsabove=False)
+        #     axins.errorbar(cp_p_erg, cp_smoothed, yerr=yerr_cp, xerr=cp_ep_err, 
+        #                 ecolor='black', markerfacecolor='None', fmt='d', markeredgecolor='g', markeredgewidth=1, markersize=9, capsize=1, elinewidth=0.5, barsabove=False)
+        #     axins.errorbar(b_p_erg, b_smoothed, yerr=yerr_b, xerr=b_ep_err, 
+        #                 ecolor='black', markerfacecolor='None', fmt='*', markeredgecolor='b', markeredgewidth=1, markersize=9, capsize=1, elinewidth=0.5, barsabove=False)
+
+    # if not log_plot:
+    #     axins.plot(xvals, fit(xvals, res_a_bvert.params['a'], res_a_bvert.params['b'], res_a_bvert.params['c'], res_a_bvert.params['d'], res_a_bvert.params['e']), 'r', alpha=0.5)
+    #     axins.plot(xvals, fit(xvals, res_a_cpvert.params['a'], res_a_cpvert.params['b'], res_a_cpvert.params['c'], res_a_cpvert.params['d'], res_a_bvert.params['e']), 'r--', alpha=0.5)
+    #     axins.plot(xvals, fit(xvals, res_cp.params['a'], res_cp.params['b'], res_cp.params['c'], res_cp.params['d'], res_a_bvert.params['e']), 'g', alpha=0.5)
+    #     axins.plot(xvals, fit(xvals, res_b.params['a'], res_b.params['b'], res_b.params['c'], res_b.params['d'], res_a_bvert.params['e']), 'b', alpha=0.5)
+    #     axins.set_xlim(2.66, 3.0)
+    #     axins.set_ylim(0.64, 0.97)
+
+    #     axins.locator_params(nbins=4)
+    #     #axins.set_xticklabels()
+    #     #axins.set_yticklabels()
+    #     box, c1, c2 = mark_inset(ax, axins, loc1=1, loc2=4, fc='none', linestyle='--')
+    #     plt.setp(box, linestyle='-', linewidth=0.5)
+    #     plt.setp([c1, c2], linewidth=0.25)
+
+    ax.set_ylabel('Light output (MeVee)', fontsize=22)
+    ax.set_xlabel('Proton recoil energy (MeV)', fontsize=22)    
+    ax.tick_params(labelsize=16)
+    if log_plot:
+        plt.yscale('log')
+        plt.xscale('log')
+        plt.ylim(0.05, 7)
+        plt.xlim(0.5, 12)
+    else:
+        ax.set_ylim(0.2, 0.5)
+        ax.set_xlim(0, 10.5)
+    ax.legend(loc=2, fontsize=16)
+    plt.tight_layout()
+
+    if save_plots:
+        plt.savefig(cwd + '/figures/psp_curves_smoothed_only_log.pdf')
     plt.show()
 
 def polar_norm(x1, x2):
@@ -2936,6 +3272,12 @@ def get_avg_lo_uncert(fin1, fin2, p_dir, dets, beam_11MeV, pulse_shape):
     data_cpvert = pd_load(fin2, p_dir)
     data_cpvert = split_filenames(data_cpvert)
 
+    # uncert measured with a-axis, uncert due to PMT drift
+    a_axis_unc_bvert11, a_axis_unc_cpvert11, a_axis_unc_bvert4, a_axis_unc_cpvert4 = pickle.load( open(p_dir + 'a_axis_lo_stds.p', 'rb')) # MeVee, from compare_a_axis_recoils
+    #               b11      cp11     b4     cp4
+    #drift_uncs =  (0.0085, 0.0113, 0.0027, 0.0055) # percent, from /home/radians/raweldon/tunl.2018.1_analysis/stilbene_final/lo_calibration/cal_and_temp_changes.py
+    drift_uncs =  (0.015, 0.0055) #0.015 accounts for 3% separation (lack of aging)
+
     if beam_11MeV:
         # ps_unc - statistical uncertainty of 1-qs/ql (used cpvert uncert - worse than bvert)
         # from /home/radians/raweldon/tunl.2018.1_analysis/stilbene_final/peak_localization/pulse_shape_get_hotspots.py  
@@ -2996,27 +3338,32 @@ def get_avg_lo_uncert(fin1, fin2, p_dir, dets, beam_11MeV, pulse_shape):
     mean_pss = mean_ps
 
     #print mean_qls
+
     if pulse_shape:
         cal_unc = [c/q for c, q in zip(cal_unc, mean_qls)]
         #print cal_unc
         if beam_11MeV:
-            total_uncerts = [np.sqrt((c*q)**2 + u**2 + (0.015*q)**2) for c, q, u in zip(cal_unc, mean_pss, uncerts)]
-            cal_uncerts = [np.sqrt((c*q)**2 + u**2 + (0.005*q)**2) for c, q, u in zip(cal_unc, mean_pss, uncerts)]
+            total_uncerts = [np.sqrt((c*q)**2 + u**2 + (a/m*q)**2 + (drift_uncs[0]*q)**2) for c, q, u, a, m in zip(cal_unc, mean_pss, uncerts, a_axis_unc_bvert11[:6], mean_qls)]
+            cal_uncerts = [np.sqrt((c*q)**2 + u**2) for c, q, u in zip(cal_unc, mean_pss, uncerts)]
+            #cal_uncerts = [np.sqrt((a/m*q)**2 + u**2) for q, u, a, m in zip(mean_pss, uncerts, a_axis_unc_bvert11[:6], mean_qls)]
         else:
-            total_uncerts = [np.sqrt((c*q)**2 + u**2 + (0.005*q)**2) for c, q, u in zip(cal_unc, mean_pss, uncerts)]
-            cal_uncerts = [0]*len(total_uncerts)
+            total_uncerts = [np.sqrt((c*q)**2 + u**2 + (a/m*q)**2 + (drift_uncs[1]*q)**2) for c, q, u, a, m in zip(cal_unc, mean_pss, uncerts, a_axis_unc_bvert4[:6], mean_qls)]
+            cal_uncerts = [np.sqrt((c*q)**2 + u**2) for c, q, u in zip(cal_unc, mean_pss, uncerts)]
+            #cal_uncerts = [np.sqrt((a/m*q)**2 + u**2) for q, u, a, m in zip(mean_pss, uncerts, a_axis_unc_bvert4[:6], mean_qls)]
         mean_pss= [1 - q for q in mean_qls]
         return total_uncerts, mean_pss, uncerts, cal_uncerts
 
     else:
         if beam_11MeV:
-            #                     cal_unc stat    cry1-crys3 uncert: account for 3% difference in low gain mode light output      
-            total_uncerts = [np.sqrt(c**2 + u**2 + (0.015*q)**2 ) for c, q, u in zip(cal_unc, mean_qls, uncerts)]
-            cal_uncerts = [np.sqrt(c**2 + u**2 + (0.005*q)**2) for c, q, u in zip(cal_unc, mean_qls, uncerts)]
+            #                     cal_unc stat   a-axis_meas  drift     
+            total_uncerts = [np.sqrt(c**2 + u**2 + a**2 + (drift_uncs[0]*q)**2) for c, q, u, a in zip(cal_unc, mean_qls, uncerts, a_axis_unc_bvert11[:6])]
+            cal_uncerts = [np.sqrt(c**2 + u**2) for c, q, u in zip(cal_unc, mean_qls, uncerts)]
+            #cal_uncerts = [np.sqry(a**2 + u**2) for u, a in zip(uncerts, a_axis_unc_bvert11[:6])]
         else:
-            #                     cal_unc stat    cal range
-            total_uncerts = [np.sqrt(c**2 + u**2 + (0.005*q)**2 ) for c, q, u in zip(cal_unc, mean_qls, uncerts)]
-            cal_uncerts = [0]*len(total_uncerts)
+            #                     cal_unc stat    e
+            total_uncerts = [np.sqrt(c**2 + u**2 + a**2 + (drift_uncs[1]*q)**2) for c, q, u, a in zip(cal_unc, mean_qls, uncerts, a_axis_unc_bvert4[:6])]
+            cal_uncerts = [np.sqrt(c**2 + u**2) for c, q, u in zip(cal_unc, mean_qls, uncerts)]
+            #cal_uncerts = [np.sqrt(a**2 + u**2) for u, a in zip(uncerts, a_axis_unc_bvert4[:6])]
 
         #for i, j, k in zip(uncerts, cal_uncerts, mean_qls):
         #    print i, j, k, j/k*100, '%'
@@ -3063,7 +3410,7 @@ def lambertian_smooth(fin1, fin2, fin, dets, bvert_tilt, cpvert_tilt, b_up, cp_u
     data_bvert = pd_load(fin1, p_dir)
     data_cpvert = pd_load(fin2, p_dir)
     
-    print '\n det   angle   mean_ql  uncert   abs_unc rel_uncert'
+    print '\n det   angle   mean_ql  uncert   cal_unc  abs_unc rel_uncert'
     for d, det in enumerate(dets):
         if d > 5:
             continue
@@ -3145,15 +3492,18 @@ def lambertian_smooth(fin1, fin2, fin, dets, bvert_tilt, cpvert_tilt, b_up, cp_u
             #    cbar.ax.errorbar(0.5, 0.5, yerr=avg_uncert, ecolor='w', elinewidth=2, capsize=4, capthick=2)
             #    cbar.ax.errorbar(0.5, 0.5, yerr=abs_uncert, ecolor='k', elinewidth=2, capsize=4, capthick=2)
 
-            if beam_11MeV:
-                cbar.ax.errorbar(0.5, 0.5, yerr=avg_uncert, ecolor='w', elinewidth=2, capsize=4, capthick=2)
-                #cbar.ax.errorbar(0.5, 0.5, yerr=abs_uncert, ecolor='k', elinewidth=2, capsize=4, capthick=2, zorder=100)
-                cbar.ax.errorbar(0.5, 0.5, yerr=cal_uncert, ecolor='k', elinewidth=2, capsize=4, capthick=2, zorder=100)
-            else:
-                cbar.ax.errorbar(0.5, 0.5, yerr=avg_uncert, ecolor='k', elinewidth=2, capsize=4, capthick=2)
+            #if beam_11MeV:
+            #    cbar.ax.errorbar(0.5, 0.5, yerr=avg_uncert, ecolor='w', elinewidth=2, capsize=4, capthick=2)
+            #    #cbar.ax.errorbar(0.5, 0.5, yerr=abs_uncert, ecolor='k', elinewidth=2, capsize=4, capthick=2, zorder=100)
+            #    cbar.ax.errorbar(0.5, 0.5, yerr=cal_uncert, ecolor='k', elinewidth=2, capsize=4, capthick=2, zorder=100)
+            #else:
+            #    cbar.ax.errorbar(0.5, 0.5, yerr=avg_uncert, ecolor='k', elinewidth=2, capsize=4, capthick=2)
+
+            cbar.ax.errorbar(0.5, 0.5, yerr=avg_uncert, ecolor='w', elinewidth=2, capsize=4, capthick=2)
+            cbar.ax.errorbar(0.5, 0.5, yerr=cal_uncert, ecolor='k', elinewidth=2, capsize=4, capthick=2, zorder=100)
             cbar.ax.tick_params(labelsize=14)
 
-            print '{:^5d} {:>6.1f} {:>8.3f} {:>8.3f} {:>8.3f} {:>8.3f}%'.format(det, theta_n[d], np.mean(ql), avg_uncerts[d], abs_uncerts[d], avg_uncerts[d]/np.mean(ql)*100)
+            print '{:^5d} {:>6.1f} {:>8.3f} {:>8.4f} {:>8.4f} {:>8.4f} {:>8.2f}%'.format(det, theta_n[d], np.mean(ql), avg_uncerts[d], cal_uncerts[d], abs_uncerts[d], avg_uncerts[d]/np.mean(ql)*100)
             plt.text(-0.71, 0.0, 'a', color='r', fontsize=f)
             plt.text(0.71, 0., 'a', color='r', fontsize=f)
             plt.text(0, 0.0, 'c\'', color='r', fontsize=f)
@@ -3162,9 +3512,11 @@ def lambertian_smooth(fin1, fin2, fin, dets, bvert_tilt, cpvert_tilt, b_up, cp_u
             if beam_11MeV:
                 en = 11.33
                 plt.title(str(round(en*np.sin(np.deg2rad(theta_n[d]))**2, 2)) + ' MeV recoil protons, low gain', fontsize=20)
+                #plt.title(str(round(en*np.sin(np.deg2rad(theta_n[d]))**2, 2)) + ' MeV recoil protons', fontsize=20)
             else:
                 en = 4.83
                 plt.title(str(round(en*np.sin(np.deg2rad(theta_n[d]))**2, 2)) + ' MeV recoil protons, high gain', fontsize=20)
+                #plt.title(str(round(en*np.sin(np.deg2rad(theta_n[d]))**2, 2)) + ' MeV recoil protons', fontsize=20)
 
             plt.xticks([])
             plt.yticks([])
@@ -3212,11 +3564,11 @@ def main():
 
     # cleans measured data
     if smooth_tilt:
-        smoothing_tilt(dets, fin, cwd, p_dir, pulse_shape=False, delayed=False, prompt=False, show_plots=False, save_plots=False, save_pickle=False)
+        smoothing_tilt(dets, fin, cwd, p_dir, pulse_shape=False, delayed=False, prompt=False, show_plots=True, save_plots=False, save_pickle=False)
 
     # comparison of ql for recoils along the a-axis
     if compare_a_axes:
-        compare_a_axis_recoils(fin, dets, cwd, p_dir, plot_by_det=True, plot_lo_curves=True, save_plots=False)
+        compare_a_axis_recoils(fin, dets, cwd, p_dir, plot_by_det=True, plot_lo_curves=True, save_a_axis_lo_stds=True, save_plots=True)
 
     # plot ratios
     if ratios_plot:
@@ -3226,10 +3578,11 @@ def main():
         adc_vs_cal_ratios(fin, dets, cwd, p_dir, plot_fit_ratio=True)
 
     if acp_curves:
-        plot_acp_lo_curves(fin, dets, cwd, p_dir, pulse_shape=False, bl_only=True, plot_fit_data=False, smoothed_data=False)
+        plot_acp_lo_curves(fin, dets, cwd, p_dir, pulse_shape=False, bl_only=True, plot_fit_data=False, smoothed_data=True, save_pickle=True)
     
     if acp_curves_fits:
-        acp_lo_curves_fits(fin, dets, cwd, p_dir, match_data=True, plot_meas_data=True, plot_smoothed_data=False, log_plot=True, save_plots=False)
+        acp_lo_curves_fits(fin, dets, cwd, p_dir, match_data=False, plot_meas_data=False, plot_smoothed_data=True, log_plot=True, save_plots=True)
+        #acp_psp_curves_fits(fin, dets, cwd, p_dir, match_data=False, plot_meas_data=False, plot_smoothed_data=True, log_plot=False, save_plots=False)
 
     # 3d plotting
     theta_n = [70, 60, 50, 40, 30, 20, 20, 30, 40, 50, 60, 70]
@@ -3302,8 +3655,10 @@ def main():
         lambertian(fin[2], fin[3], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=False, pulse_shape=False)
 
     if lambertian_smoothed:
-        lambertian_smooth(sin_fits[0], sin_fits[1], (fin[0], fin[1]), dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, pulse_shape=True, save_plot=False)
-        lambertian_smooth(sin_fits[2], sin_fits[3], (fin[2], fin[3]), dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=False, pulse_shape=True, save_plot=False)
+        lambertian_smooth(sin_fits[0], sin_fits[1], (fin[0], fin[1]), dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, 
+                          beam_11MeV=True, pulse_shape=True, save_plot=False)
+        lambertian_smooth(sin_fits[2], sin_fits[3], (fin[2], fin[3]), dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, 
+                          beam_11MeV=False, pulse_shape=True, save_plot=False)
 
 if __name__ == '__main__':
     # check 3d scatter plots for both crystals
@@ -3327,7 +3682,9 @@ if __name__ == '__main__':
 
     # plot a, cp LO curves
     acp_curves = False
-    acp_curves_fits = True
+
+    # plot LO and psp measured and smoothed curves with fits
+    acp_curves_fits = False
 
     # plot heatmaps with data points
     heatmap_11 = False 
@@ -3362,6 +3719,6 @@ if __name__ == '__main__':
 
     # Lambertian projection
     lambertian_proj = False
-    lambertian_smoothed = False
+    lambertian_smoothed = True
 
     main()
