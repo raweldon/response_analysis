@@ -2415,10 +2415,10 @@ def acp_psp_curves_fits(fin, dets, cwd, p_dir, match_data, plot_meas_data, plot_
         print lmfit.fit_report(res_a_bvert, show_correl=True)
         print '\n', res_a_cpvert.message
         print lmfit.fit_report(res_a_cpvert, show_correl=True)
-        print '\n', res_cp.message
-        print lmfit.fit_report(res_cp, show_correl=True)
         print '\n', res_b.message
         print lmfit.fit_report(res_b, show_correl=True)
+        print '\n', res_cp.message
+        print lmfit.fit_report(res_cp, show_correl=True)
 
         # include bvert-cpvert crystal uncerts for low gain data
         yerr_a_bvert = [np.sqrt((0.015*a)**2 + unc**2) for a, unc in zip(a_bvert_smoothed[:6], a_uncert_cal_bvert[:6])] + a_uncert_cal_bvert[6:]
@@ -3155,7 +3155,7 @@ def lambertian(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, 
     # ignore divide by zero warning
     np.seterr(divide='ignore', invalid='ignore')
 
-    avg_uncerts, avg_qls, abs_uncerts = get_avg_lo_uncert(fin1, fin2, p_dir, dets, beam_11MeV, pulse_shape) 
+    avg_uncerts, avg_qls, abs_uncerts, cal_uncerts = get_avg_lo_uncert(fin1, fin2, p_dir, dets, beam_11MeV, pulse_shape) 
 
     data_bvert = pd_load(fin1, p_dir)
     data_bvert = split_filenames(data_bvert)
@@ -3163,7 +3163,9 @@ def lambertian(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, 
     data_cpvert = split_filenames(data_cpvert)
 
     print '\n det   angle   mean_ql  uncert   abs_unc rel_uncert'
-    for d, det in enumerate(dets):       
+    for d, det in enumerate(dets):      
+        if d > 5:
+            continue 
         df_b_mapped = map_data_3d(data_bvert, det, bvert_tilt, b_up, theta_n[d], phi_n[d], beam_11MeV) 
         df_b_mapped_mirror = map_data_3d(data_bvert, det, bvert_tilt, np.asarray(((1,0,0), (0,1,0), (0,0,-1))), theta_n[d], phi_n[d], beam_11MeV)
         df_cp_mapped = map_data_3d(data_cpvert, det, cpvert_tilt, cp_up, theta_n[d], phi_n[d], beam_11MeV)
@@ -3472,7 +3474,7 @@ def lambertian_smooth(fin1, fin2, fin, dets, bvert_tilt, cpvert_tilt, b_up, cp_u
             #print max(ql), min(ql), max(ql)/min(ql)
             plt.figure()
             plt.imshow(interp.T, extent=(-1,1,-1,1), origin='lower', cmap='viridis', interpolation='none')# , norm=LogNorm(vmin=0.07, vmax=5.36)) Log scale doesn't work 
-            #plt.scatter(X, Y, c=ql, cmap='viridis')
+            plt.scatter(X, Y, c=ql, cmap='viridis')
             # put avg uncert on colorbar
             ## need to scale y from (0, 1) to (min(ql), max(ql))
             avg_uncert = avg_uncerts[d]/(max(ql) - min(ql))
@@ -3581,7 +3583,7 @@ def main():
         plot_acp_lo_curves(fin, dets, cwd, p_dir, pulse_shape=False, bl_only=True, plot_fit_data=False, smoothed_data=True, save_pickle=True)
     
     if acp_curves_fits:
-        acp_lo_curves_fits(fin, dets, cwd, p_dir, match_data=False, plot_meas_data=False, plot_smoothed_data=True, log_plot=True, save_plots=True)
+        acp_lo_curves_fits(fin, dets, cwd, p_dir, match_data=False, plot_meas_data=False, plot_smoothed_data=True, log_plot=True, save_plots=False)
         #acp_psp_curves_fits(fin, dets, cwd, p_dir, match_data=False, plot_meas_data=False, plot_smoothed_data=True, log_plot=False, save_plots=False)
 
     # 3d plotting
@@ -3656,9 +3658,9 @@ def main():
 
     if lambertian_smoothed:
         lambertian_smooth(sin_fits[0], sin_fits[1], (fin[0], fin[1]), dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, 
-                          beam_11MeV=True, pulse_shape=True, save_plot=False)
+                          beam_11MeV=True, pulse_shape=False, save_plot=False)
         lambertian_smooth(sin_fits[2], sin_fits[3], (fin[2], fin[3]), dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, 
-                          beam_11MeV=False, pulse_shape=True, save_plot=False)
+                          beam_11MeV=False, pulse_shape=False, save_plot=False)
 
 if __name__ == '__main__':
     # check 3d scatter plots for both crystals
@@ -3672,7 +3674,7 @@ if __name__ == '__main__':
     smooth_tilt = False
 
     # compare a_axis recoils (all tilts measure ql along a-axis)
-    compare_a_axes = False
+    compare_a_axes = True
 
     # plots a/c' and a/b ql or pulse shape ratios from 0deg measurements
     ratios_plot = False
@@ -3719,6 +3721,6 @@ if __name__ == '__main__':
 
     # Lambertian projection
     lambertian_proj = False
-    lambertian_smoothed = True
+    lambertian_smoothed = False
 
     main()
