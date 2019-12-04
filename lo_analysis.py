@@ -2165,7 +2165,8 @@ def acp_lo_curves_fits(fin, dets, cwd, p_dir, match_data, plot_meas_data, plot_s
                             markeredgecolor='g', markeredgewidth=1, markersize=9, capsize=1, elinewidth=0.5, barsabove=False)
             axins.errorbar(b_p_erg, b_ql, yerr=b_uncert_cal, xerr=b_ep_err, ecolor='black', markerfacecolor='None', fmt='o', 
                             markeredgecolor='b', markeredgewidth=1, markersize=9, capsize=1, elinewidth=0.5, barsabove=False)
- 
+
+
     if plot_smoothed_data:
         max_smoothed, min_smoothed = get_smoothed_data(dets)
 
@@ -2240,6 +2241,13 @@ def acp_lo_curves_fits(fin, dets, cwd, p_dir, match_data, plot_meas_data, plot_s
                         ecolor='black', markerfacecolor='None', fmt='s', markeredgecolor='g', markeredgewidth=1, markersize=9, capsize=1, elinewidth=0.5, barsabove=False)
             axins.errorbar(cp_p_erg, b_smoothed, yerr=b_uncert_cal, xerr=b_ep_err, 
                         ecolor='black', markerfacecolor='None', fmt='o', markeredgecolor='b', markeredgewidth=1, markersize=9, capsize=1, elinewidth=0.5, barsabove=False)
+
+        # print measured data values
+        print '{:^6s} {:^6s} {:^6s} {:^6s} {:^6s} {:^6s} {:^6s} {:^6s} {:^6s} {:^6s}'.format('Ep', 'lo_a', 'sig_Ep', 'sig_lo', 'lo_b', 'sig_Ep', 'sig_lo', 'lo_cp', 'sig_Ep', 'sig_lo')
+        for i in range(len(a_p_erg_bvert)):
+            print '{:^6.2f} {:>6.2f} {:>6.2f} {:>6.2f} {:>6.2f} {:>6.2f} {:>6.2f} {:>6.2f} {:>6.2f} {:>6.2f}'.format(float(a_p_erg_bvert[i]), float(a_bvert_smoothed[i]), float(a_ep_err_bvert[i]),
+                                                                                                                     float(a_uncert_cal_bvert[i]), float(b_smoothed[i]), float(b_ep_err[i]), 
+                                                                                                                     float(b_uncert_cal[i]), float(cp_smoothed[i]), float(cp_ep_err[i]), float(cp_uncert_cal[i]))
 
     if not log_plot:
         axins.plot(xvals, fit(xvals, res_a_bvert.params['a'], res_a_bvert.params['b'], res_a_bvert.params['c'], res_a_bvert.params['d'], res_a_bvert.params['e']), 'r', alpha=0.5)
@@ -3590,7 +3598,7 @@ def main():
         plot_acp_lo_curves(fin, dets, cwd, p_dir, pulse_shape=False, bl_only=True, plot_fit_data=False, smoothed_data=True, save_pickle=True)
     
     if acp_curves_fits:
-        acp_lo_curves_fits(fin, dets, cwd, p_dir, match_data=False, plot_meas_data=False, plot_smoothed_data=True, log_plot=True, save_plots=False)
+        acp_lo_curves_fits(fin, dets, cwd, p_dir, match_data=False, plot_meas_data=False, plot_smoothed_data=True, log_plot=False, save_plots=False)
         #acp_psp_curves_fits(fin, dets, cwd, p_dir, match_data=False, plot_meas_data=False, plot_smoothed_data=True, log_plot=False, save_plots=False)
 
     # 3d plotting
@@ -3693,10 +3701,10 @@ if __name__ == '__main__':
     acp_curves = False
 
     # plot LO and psp measured and smoothed curves with fits
-    acp_curves_fits = False
+    acp_curves_fits = True
 
     # plot heatmaps with data points
-    heatmap_11 = True 
+    heatmap_11 = False 
     heatmap_4 = False
 
     # plot heatmaps with fitted data
