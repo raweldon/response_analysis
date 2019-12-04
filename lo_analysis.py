@@ -693,7 +693,7 @@ def scatter_check_3d(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, the
             mlab.title('det ' + str(det))
             mlab.show()
 
-def heatmap_multiplot(x, y, z, data, theta_n, d, cwd, save_multiplot, beam_11MeV, fitted):
+def heatmap_multiplot(x, y, z, data, theta_n, d, cwd, save_multiplot, pulse_shape, beam_11MeV, fitted):
     #            a   b  c'  nice 
     plot_angle = 70
     if beam_11MeV:
@@ -720,11 +720,17 @@ def heatmap_multiplot(x, y, z, data, theta_n, d, cwd, save_multiplot, beam_11MeV
             tri_smooth = mlab.pipeline.poly_data_normals(tri) # smooths delaunay triangulation mesh
             surf = mlab.pipeline.surface(tri_smooth, colormap='viridis')
             mlab.axes(pts, xlabel='a', ylabel='b', zlabel='c\'')
-            mlab.colorbar(surf, orientation='vertical') 
+            if pulse_shape:
+                mlab.colorbar(surf, orientation='vertical')
+            else:
+                mlab.colorbar(surf, orientation='vertical', title='MeVee')  
             mlab.view(azimuth=az, elevation=el, distance=7.5, figure=fig)
             if save_multiplot:
                 print theta_n[d], names[i]
-                mlab.savefig(cwd + names[i] + '.png')
+                if pulse_shape:
+                    mlab.savefig(cwd + names[i] + '_psp.png')
+                else:
+                    mlab.savefig(cwd + names[i] + '_lo.png')
                 print 'saved to ' + cwd + names[i] + '.png'
                 mlab.clf()
                 mlab.close()      
@@ -804,9 +810,9 @@ def plot_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_
         # points3d with delaunay filter - works best!!
         ## use for nice looking plots
         if multiplot:
-            heatmap_multiplot(x, y, z, ql, theta_n, d, cwd + '/figures/3d_lo/', save_multiplot, beam_11MeV, fitted=False)
+            heatmap_multiplot(x, y, z, ql, theta_n, d, cwd + '/figures/3d_lo/', save_multiplot, plot_pulse_shape, beam_11MeV, fitted=False)
             if plot_pulse_shape:
-                heatmap_multiplot(x, y, z, ps, theta_n, d, cwd + '/figures/3d_pulse_shape/', save_multiplot, beam_11MeV, fitted=False)
+                heatmap_multiplot(x, y, z, ps, theta_n, d, cwd + '/figures/3d_pulse_shape/', save_multiplot, plot_pulse_shape, beam_11MeV, fitted=False)
             if not save_multiplot:
                 mlab.show()
 
@@ -869,7 +875,8 @@ def plot_fitted_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up,
         x, y, z = xyz.T
 
         if multiplot:
-            heatmap_multiplot(x, y, z, ql, theta_n, d, cwd, save_multiplot, beam_11MeV, fitted=True)
+            pulse_shape = False
+            heatmap_multiplot(x, y, z, ql, theta_n, d, cwd, save_multiplot, pulse_shape, beam_11MeV, fitted=True)
             if save_multiplot:
                 continue
             mlab.show()
@@ -955,10 +962,10 @@ def plot_avg_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, th
         # points3d with delaunay filter - works best!!
         ## use for nice looking plots
         if multiplot:
-            heatmap_multiplot(x, y, z, ql, theta_n, d, cwd + '/figures/3d_lo', save_multiplot, beam_11MeV, fitted=False)
+            heatmap_multiplot(x, y, z, ql, theta_n, d, cwd + '/figures/3d_lo', save_multiplot, plot_pulse_shape, beam_11MeV, fitted=False)
             if plot_pulse_shape:
                 ps = np.array([(q + p)/2 for q, p in zip(df.ps.iloc[i], df.ps.iloc[order[i]])])
-                heatmap_multiplot(x, y, z, ps, theta_n, d, cwd + '/figures/3d_pulse_shape', save_multiplot, beam_11MeV, fitted=False)
+                heatmap_multiplot(x, y, z, ps, theta_n, d, cwd + '/figures/3d_pulse_shape', save_multiplot, plot_pulse_shape, beam_11MeV, fitted=False)
             if not save_multiplot:
                 mlab.show()
 
@@ -1055,7 +1062,7 @@ def plot_smoothed_fitted_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_u
         phi = np.array(phi)  
 
         if multiplot:
-            heatmap_multiplot(x, y, z, ql, theta_n, d, cwd + '/figures/smoothed/', save_multiplot, beam_11MeV, fitted=False)
+            heatmap_multiplot(x, y, z, ql, theta_n, d, cwd + '/figures/smoothed/', save_multiplot, pulse_shape, beam_11MeV, fitted=False)
             if save_multiplot:
                 continue
             mlab.show()
@@ -1076,7 +1083,7 @@ def plot_smoothed_fitted_heatmaps(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_u
             #    mlab.text3d(x_val, y_val, z_val, str(round(ph, 2)), scale=0.02, color=(0,0,0), figure=fig)
 
             mlab.axes(pts, xlabel='a', ylabel='b', zlabel='c\'')
-            mlab.colorbar(surf, orientation='vertical') 
+            mlab.colorbar(surf, orientation='vertical', title='MeVee') 
             mlab.view(azimuth=0, elevation=-90, distance=7.5, figure=fig)            
             mlab.show()  
         #plt.show()
@@ -3605,10 +3612,10 @@ def main():
     ## heat maps with data points
     if heatmap_11:
         plot_heatmaps(fin[0], fin[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=True, 
-                      plot_pulse_shape=True, multiplot=False, save_multiplot=False, show_delaunay=False)
+                      plot_pulse_shape=False, multiplot=True, save_multiplot=False, show_delaunay=False)
     if heatmap_4:
         plot_heatmaps(fin[2], fin[3], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV=False, 
-                      plot_pulse_shape=True, multiplot=False, save_multiplot=False, show_delaunay=False)
+                      plot_pulse_shape=False, multiplot=False, save_multiplot=False, show_delaunay=False)
 
     ## heat maps with fitted data
     sin_fits = ['bvert_11MeV_sin_params.p', 'cpvert_11MeV_sin_params.p', 'bvert_4MeV_sin_params.p', 'cpvert_4MeV_sin_params.p']
@@ -3628,11 +3635,11 @@ def main():
     # plots smoothed data from smooth_tilt()
     sin_fits = ['bvert_11MeV_sin_params_smoothed.p', 'cpvert_11MeV_sin_params_smoothed.p', 'bvert_4MeV_sin_params_smoothed.p', 'cpvert_4MeV_sin_params_smoothed.p']                     
     if smoothed_fitted_heatmap_11:
-        plot_smoothed_fitted_heatmaps(sin_fits[0], sin_fits[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, pulse_shape=False, 
-                                      beam_11MeV=True, multiplot=False, save_multiplot=False)
+        plot_smoothed_fitted_heatmaps(sin_fits[0], sin_fits[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, pulse_shape=True, 
+                                      beam_11MeV=True, multiplot=True, save_multiplot=True)
     if smoothed_fitted_heatmap_4:
-        plot_smoothed_fitted_heatmaps(sin_fits[2], sin_fits[3], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, pulse_shape=False, 
-                                      beam_11MeV=False, multiplot=False, save_multiplot=False)
+        plot_smoothed_fitted_heatmaps(sin_fits[2], sin_fits[3], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, pulse_shape=True, 
+                                      beam_11MeV=False, multiplot=True, save_multiplot=True)
 
     ## polar interpolation
     if polar_plots:
@@ -3674,7 +3681,7 @@ if __name__ == '__main__':
     smooth_tilt = False
 
     # compare a_axis recoils (all tilts measure ql along a-axis)
-    compare_a_axes = True
+    compare_a_axes = False
 
     # plots a/c' and a/b ql or pulse shape ratios from 0deg measurements
     ratios_plot = False
@@ -3689,7 +3696,7 @@ if __name__ == '__main__':
     acp_curves_fits = False
 
     # plot heatmaps with data points
-    heatmap_11 = False 
+    heatmap_11 = True 
     heatmap_4 = False
 
     # plot heatmaps with fitted data
