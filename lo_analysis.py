@@ -468,7 +468,8 @@ def smoothing_tilt(dets, pickle_name, cwd, p_dir, pulse_shape, delayed, prompt, 
 
                     if show_plots:
                         # smoothed data plots
-                        plt.figure(fig_no[d] + 10, figsize=(16,8))
+                        #plt.figure(fig_no[d] + 10, figsize=(16,8)) # dissertation
+                        plt.figure(fig_no[d] + 10, figsize=(11,8)) # paper
                         plt.errorbar(angles, smoothed_data, yerr=lo_unc, ecolor='black', markerfacecolor=color[tidx], fmt='o', 
                                     markeredgecolor='k', markeredgewidth=1, markersize=10, capsize=1, label=str(tilt) + '$^{\circ}$ mount')
                         plt.plot(x_vals, y_vals, '--', color=color[tidx])
@@ -490,17 +491,19 @@ def smoothing_tilt(dets, pickle_name, cwd, p_dir, pulse_shape, delayed, prompt, 
                         plt.legend(loc=3, fontsize=16)
                         plt.tight_layout()
 
-                        if tilt == -15 and save_plots:
+                        if tilt == -15 and det == 4 and save_plots:
                             if pulse_shape:
                                 #plt.savefig(cwd + '/figures/tilt_plots/pulse_shape/' + name + '_pulse_shape_smooth.png')
                                 plt.savefig(cwd + '/figures/tilt_plots/pulse_shape/' + name + '_pulse_shape_smooth.pdf')
                             else:
                                 #plt.savefig(cwd + '/figures/tilt_plots/' + name + '_smooth.png', dpi=500)
-                                plt.savefig(cwd + '/figures/tilt_plots/' + name + '_smooth.pdf')
+                                #plt.savefig(cwd + '/figures/tilt_plots/' + name + '_smooth.pdf')
+                                plt.savefig(cwd + '/figures/tilt_plots/' + name + '_smooth_paper.pdf')
                                 print 'plots saved to /figures/tilt_plots/' + name + '_smooth.png'
 
                         # original data plots
-                        plt.figure(fig_no[d], figsize=(16,8))
+                        #plt.figure(fig_no[d], figsize=(16,8)) # dissertation
+                        plt.figure(fig_no[d], figsize=(11,8)) # paper
                         plt.errorbar(angles, data, yerr=lo_unc, ecolor='black', markerfacecolor=color[tidx], fmt='o', 
                                     markeredgecolor='k', markeredgewidth=1, markersize=10, capsize=1, label=str(tilt) + '$^{\circ}$ mount')
                         plt.plot(x_orig, y_orig, '--', color=color[tidx])
@@ -522,13 +525,14 @@ def smoothing_tilt(dets, pickle_name, cwd, p_dir, pulse_shape, delayed, prompt, 
                         plt.legend(loc=3, fontsize=16)
                         plt.tight_layout()
                     
-                        if tilt == -15 and save_plots:
+                        if tilt == -15 and det == 4 and save_plots:
                             if pulse_shape:
                                 #plt.savefig(cwd + '/figures/tilt_plots/pulse_shape/' + name + '_pulse_shape.png', dpi=500)
                                 plt.savefig(cwd + '/figures/tilt_plots/pulse_shape/' + name + '_pulse_shape.pdf')
                             else:
                                 #plt.savefig(cwd + '/figures/tilt_plots/' + name + '.png', dpi=500)
-                                plt.savefig(cwd + '/figures/tilt_plots/' + name + '.pdf')
+                                #plt.savefig(cwd + '/figures/tilt_plots/' + name + '.pdf')
+                                plt.savefig(cwd + '/figures/tilt_plots/' + name + '_paper.pdf')
                                 print 'plots saved to /figures/tilt_plots/' + name + '.png'
         if show_plots:
             plt.show()
@@ -1221,7 +1225,7 @@ def compare_a_axis_recoils(fin, dets, cwd, p_dir, plot_by_det, plot_lo_curves, s
         plt.errorbar(Ep, ql_bvert, yerr=ql_stds_bvert, ecolor='black', markerfacecolor='None', fmt='o', 
             markeredgecolor='r', markeredgewidth=1, markersize=9, capsize=1, label= 'a-axis, crystal 1')
         plt.errorbar(Ep, ql_cpvert, yerr=ql_stds_cpvert, ecolor='black', markerfacecolor='None', fmt='^', 
-            markeredgecolor='b', markeredgewidth=1, markersize=9, capsize=1, label= 'a-axis, crystal 3')
+            markeredgecolor='b', markeredgewidth=1, markersize=9, capsize=1, label= 'a-axis, crystal 2')
         plt.xlim(0, 11)
         plt.xlabel('Proton energy deposition (MeV)', fontsize=16)
         plt.ylabel('Light output (MeVee)', fontsize=16)
@@ -1230,8 +1234,24 @@ def compare_a_axis_recoils(fin, dets, cwd, p_dir, plot_by_det, plot_lo_curves, s
         plt.legend(loc=4, fontsize=14)
         plt.tight_layout()
 
+        plt.figure(101)
+        plt.errorbar(Ep, ql_bvert, yerr=ql_stds_bvert, ecolor='r', markerfacecolor='None', fmt='None', 
+            markeredgecolor='r', markeredgewidth=3, markersize=10, capsize=3, elinewidth=2, label= 'a-axis, crystal 1')
+        plt.errorbar(Ep, ql_cpvert, yerr=ql_stds_cpvert, ecolor='b', markerfacecolor='None', fmt='None', 
+            markeredgecolor='b', markeredgewidth=3, markersize=10, capsize=3, elinewidth=2, label= 'a-axis, crystal 2')
+        plt.xlim(0.5, 12)
+        plt.ylim(0.09, 6)
+        plt.xscale('log')
+        plt.yscale('log')
+        plt.xlabel('Proton energy deposition (MeV)', fontsize=16)
+        plt.ylabel('Light output (MeVee)', fontsize=16)
+        plt.xticks(fontsize=14)
+        plt.yticks(fontsize=14)
+        plt.legend(loc=4, fontsize=14)
+        plt.tight_layout()
+
         if save_plots:
-            plt.savefig(cwd + '/figures/compare_a_axis/avg_a_axis_lo_curves.pdf')
+            plt.savefig(cwd + '/figures/compare_a_axis/avg_a_axis_lo_curves_paper.pdf')
 
         # print bvert, cpvert relative diff
         print '\n{:^8s} {:>8s} {:>8s} {:>10s}'.format('E_p', 'ql_1', 'ql_3', 'rel_diff')
@@ -3585,7 +3605,7 @@ def main():
 
     # comparison of ql for recoils along the a-axis
     if compare_a_axes:
-        compare_a_axis_recoils(fin, dets, cwd, p_dir, plot_by_det=True, plot_lo_curves=True, save_a_axis_lo_stds=True, save_plots=True)
+        compare_a_axis_recoils(fin, dets, cwd, p_dir, plot_by_det=True, plot_lo_curves=True, save_a_axis_lo_stds=False, save_plots=False)
 
     # plot ratios
     if ratios_plot:
@@ -3613,7 +3633,7 @@ def main():
 
     ## use to check orientations
     if scatter_11:
-        scatter_check_3d(fin[0], fin[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, beam_11MeV=True, matplotlib=False)
+        scatter_check_3d(fin[0], fin[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, beam_11MeV=True, matplotlib=True)
     if scatter_4:
         scatter_check_3d(fin[2], fin[3], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, beam_11MeV=False, matplotlib=False)
 
@@ -3689,7 +3709,7 @@ if __name__ == '__main__':
     smooth_tilt = False
 
     # compare a_axis recoils (all tilts measure ql along a-axis)
-    compare_a_axes = False
+    compare_a_axes = True
 
     # plots a/c' and a/b ql or pulse shape ratios from 0deg measurements
     ratios_plot = False
@@ -3701,7 +3721,7 @@ if __name__ == '__main__':
     acp_curves = False
 
     # plot LO and psp measured and smoothed curves with fits
-    acp_curves_fits = True
+    acp_curves_fits = False
 
     # plot heatmaps with data points
     heatmap_11 = False 
