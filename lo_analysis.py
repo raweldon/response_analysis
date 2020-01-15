@@ -11,6 +11,7 @@
 '''
 import pyface.qt  # must import first to use mayavi
 import numpy as np 
+import csv
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
@@ -3575,6 +3576,178 @@ def lambertian_smooth(fin1, fin2, fin, dets, bvert_tilt, cpvert_tilt, b_up, cp_u
                         plt.savefig(cwd + '/figures/lambert/det' + str(det) + '_lambert_lo_4MeV.pdf')
     plt.show()
 
+def text_file_data(fin, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, pulse_shape, measured, smoothed):
+    ''' Plots the heatmap for a hemishpere of measurements
+        Full sphere is made by plotting a mirror image of the hemiphere measurements
+    '''
+
+    fs = ((fin[0], fin[1]), (fin[2], fin[3]))
+    E_n = (11.33, 4.83) # MeV
+    gain_setting = ('low_gain', 'high_gain')
+    det_angles = [70, 60, 50, 40, 30, 20, 20, 30, 40, 50, 60, 70]
+
+    if measured:
+        for f, en, gain in zip(fs, E_n, gain_setting):
+            if en == 11.33:
+                beam_11MeV = True
+            else:
+                beam_11MeV = False
+            print '\nbeam_11MeV =', str(beam_11MeV)
+            data_bvert = pd_load(f[0], p_dir)
+            data_bvert = split_filenames(data_bvert)
+            data_cpvert = pd_load(f[1], p_dir)
+            data_cpvert = split_filenames(data_cpvert)
+
+            det_energies = [round(en*np.sin(np.deg2rad(x))**2, 2) for x in det_angles]
+
+            for d, det in enumerate(dets):  
+                if d > 5:   
+                    continue  
+
+                print '\ndet_no =', det, 'theta_n =', theta_n[d]
+                df_b_mapped = map_data_3d(data_bvert, det, bvert_tilt, b_up, theta_n[d], phi_n[d], beam_11MeV) 
+                df_b_mapped_mirror = map_data_3d(data_bvert, det, bvert_tilt, np.asarray(((1,0,0), (0,1,0), (0,0,-1))), theta_n[d], phi_n[d], beam_11MeV)
+                df_cp_mapped = map_data_3d(data_cpvert, det, cpvert_tilt, cp_up, theta_n[d], phi_n[d], beam_11MeV)
+                df_cp_mapped_mirror = map_data_3d(data_cpvert, det, cpvert_tilt, np.asarray(((-1,0,0), (0,0,-1), (0,1,0))), theta_n[d], phi_n[d], beam_11MeV)
+
+                # convert to cartesian
+                theta_b = np.concatenate([df_b_mapped.theta.values, df_b_mapped_mirror.theta.values])
+                theta_cp = np.concatenate([df_cp_mapped.theta.values, df_cp_mapped_mirror.theta.values])
+                phi_b = np.concatenate([df_b_mapped.phi.values, df_b_mapped_mirror.phi.values])
+                phi_cp = np.concatenate([df_cp_mapped.phi.values, df_cp_mapped_mirror.phi.values])
+
+                x_b, y_b, z_b = polar_to_cartesian(theta_b, phi_b, b_up, cp_up)
+                x_cp, y_cp, z_cp = polar_to_cartesian(theta_cp, phi_cp, cp_up, cp_up)
+
+                x = np.round(np.concatenate((x_b, x_cp)), 12)
+                y = np.round(np.concatenate((y_b, y_cp)), 12)
+                z = np.round(np.concatenate((z_b, z_cp)), 12)
+                ql = np.concatenate([df_b_mapped.ql_mean.values, df_b_mapped_mirror.ql_mean.values, df_cp_mapped.ql_mean.values, df_cp_mapped_mirror.ql_mean.values])
+
+                # remove repeated points
+                xyz = np.array(zip(x, y, z))
+                xyz_u, indices = np.unique(xyz, axis=0, return_index=True)
+                ql = np.round(ql[indices], 4)
+                x, y, z = xyz_u.T
+
+                # crystal 1 (b_vert), crystal 2 (cp_vert) labels
+                crystal = np.array(['crystal_1']*len(x_b) + ['crystal_2']*len(x_cp))
+                crystal = crystal[indices]
+
+                if pulse_shape:
+                    qs = np.concatenate([df_b_mapped.qs_mean.values, df_b_mapped_mirror.qs_mean.values, df_cp_mapped.qs_mean.values, df_cp_mapped_mirror.qs_mean.values])
+                    qs = qs[indices]
+                    ps = [1 - a/b for a, b in zip(qs, ql)]
+                    data = np.array([ps, x, y, z, crystal])
+                    file_path = cwd + '/text_data/psp_' + str(int(det_energies[d]*100)) + 'keV_' + gain + '_measured.txt'
+
+                else:
+                    data = np.array([ql, x, y, z, np.array(crystal)])
+                    file_path = cwd + '/text_data/lo_' + str(int(det_energies[d]*100)) + 'keV_' + gain + '_measured.txt'    
+
+                # save data to ascii file
+                data = data.T
+                with open(file_path, 'w') as save_file:
+                    np.savetxt(save_file, data, fmt=['%s','%s','%s','%s', '%s'])
+
+                print '\ndata saved to', file_path             
+
+    if smoothed:
+
+        def map_smoothed_fitted_data_3d(data, det, tilts, crystal_orientation, theta_neutron, phi_neutron, beam_11MeV):
+            # like map_data_3d but for fitted data
+            det_df = data.loc[(data.det == det)]
+            ql_all, theta_p, phi_p, angles_p = [], [], [], []
+            for t, tilt in enumerate(tilts):
+                
+                tilt_df = det_df.loc[(data.tilt == tilt)]
+                angles = np.arange(0, 180, 5) # 5 and 2 look good
+        
+                ql = sin_func(np.deg2rad(angles), tilt_df['a'].values, tilt_df['b'].values, tilt_df['phi'].values)
+
+                #plt.figure(0)
+                #plt.plot(angles, ql, 'o')
+                
+                thetap, phip = map_3d(tilt, crystal_orientation, angles, theta_neutron, phi_neutron)       
+                ql_all.extend(ql)
+                theta_p.extend(thetap)
+                phi_p.extend(phip)
+                angles_p.extend(angles)
+        
+            d = {'ql': ql_all, 'theta': theta_p, 'phi': phi_p, 'angles': angles_p}
+            df = pd.DataFrame(data=d)
+            return df
+
+        # smoothed data, pickles 
+        sin_fits = (('bvert_11MeV_sin_params_smoothed.p', 'cpvert_11MeV_sin_params_smoothed.p'), ('bvert_4MeV_sin_params_smoothed.p', 'cpvert_4MeV_sin_params_smoothed.p'))                    
+
+        for f, en, gain in zip(sin_fits, E_n, gain_setting):
+            if en == 11.33:
+                beam_11MeV = True
+            else:
+                beam_11MeV = False
+                    
+            if pulse_shape:
+                f1 = f[0].split('.')
+                fin1 = f1[0] + '_ps.' + f1[1]
+                f2 = f[1].split('.')
+                fin2 = f2[0] + '_ps.' + f2[1]
+                data_bvert = pd_load(fin1, p_dir)
+                data_cpvert = pd_load(fin2, p_dir)
+            else:
+                data_bvert = pd_load(f[0], p_dir)
+                data_cpvert = pd_load(f[1], p_dir)
+
+            det_energies = [round(en*np.sin(np.deg2rad(x))**2, 2) for x in det_angles]
+
+            for d, det in enumerate(dets):
+                if d > 5:
+                    continue
+                print 'det_no =', det, 'theta_n =', theta_n[d]
+                df_b_mapped = map_smoothed_fitted_data_3d(data_bvert, det, bvert_tilt, b_up, theta_n[d], phi_n[d], beam_11MeV)
+                df_cp_mapped = map_smoothed_fitted_data_3d(data_cpvert, det, cpvert_tilt, cp_up, theta_n[d], phi_n[d], beam_11MeV)
+                df_b_mapped_mirror = map_smoothed_fitted_data_3d(data_bvert, det, bvert_tilt, np.asarray(((1,0,0), (0,1,0), (0,0,-1))), theta_n[d], phi_n[d], beam_11MeV)
+                df_cp_mapped_mirror = map_smoothed_fitted_data_3d(data_cpvert, det, cpvert_tilt, np.asarray(((-1,0,0), (0,0,-1), (0,1,0))), theta_n[d], phi_n[d], beam_11MeV)
+
+                # convert to cartesian
+                theta_b = np.concatenate([df_b_mapped.theta.values, df_b_mapped_mirror.theta.values])
+                theta_cp = np.concatenate([df_cp_mapped.theta.values, df_cp_mapped_mirror.theta.values])
+                phi_b = np.concatenate([df_b_mapped.phi.values, df_b_mapped_mirror.phi.values])
+                phi_cp = np.concatenate([df_cp_mapped.phi.values, df_cp_mapped_mirror.phi.values])
+
+                angles_b = np.concatenate([df_b_mapped.angles.values, df_b_mapped_mirror.angles.values])
+                angles_cp = np.concatenate([df_cp_mapped.angles.values, df_cp_mapped_mirror.angles.values])
+                angles = np.concatenate((angles_b, angles_cp))
+
+                x_b, y_b, z_b = polar_to_cartesian(theta_b, phi_b, b_up, cp_up)
+                x_cp, y_cp, z_cp = polar_to_cartesian(theta_cp, phi_cp, cp_up, cp_up)
+
+                x = np.round(np.concatenate((x_b, x_cp)), 12)
+                y = np.round(np.concatenate((y_b, y_cp)), 12)
+                z = np.round(np.concatenate((z_b, z_cp)), 12)
+                ql = np.concatenate([df_b_mapped.ql.values, df_b_mapped_mirror.ql.values, df_cp_mapped.ql.values, df_cp_mapped_mirror.ql.values])
+
+                # remove repeated points
+                xyz = np.array(zip(x,y,z))
+                xyz, indices = np.unique(xyz, axis=0, return_index=True)
+                ql = ql[indices]
+                x, y, z = xyz.T
+
+                # save data to ascii file
+                data = np.array([ql, x, y, z])
+
+                if pulse_shape:
+                    file_path = cwd + '/text_data/psp_' + str(int(det_energies[d]*100)) + 'keV_' + gain + '_smoothed.txt'
+                else:
+                    file_path = cwd + '/text_data/lo_' + str(int(det_energies[d]*100)) + 'keV_' + gain + '_smoothed.txt' 
+
+                data = data.T
+                with open(file_path, 'w+') as save_file:
+                    np.savetxt(save_file, data, fmt=['%.4f','%.12f','%.12f','%.12f' ])
+
+                print '\ndata saved to', file_path                  
+                    
+
 def main():
     cwd = os.getcwd()
     p_dir = cwd + '/pickles/'
@@ -3664,10 +3837,10 @@ def main():
     sin_fits = ['bvert_11MeV_sin_params_smoothed.p', 'cpvert_11MeV_sin_params_smoothed.p', 'bvert_4MeV_sin_params_smoothed.p', 'cpvert_4MeV_sin_params_smoothed.p']                     
     if smoothed_fitted_heatmap_11:
         plot_smoothed_fitted_heatmaps(sin_fits[0], sin_fits[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, pulse_shape=True, 
-                                      beam_11MeV=True, multiplot=True, save_multiplot=True)
+                                      beam_11MeV=True, multiplot=True, save_multiplot=False)
     if smoothed_fitted_heatmap_4:
         plot_smoothed_fitted_heatmaps(sin_fits[2], sin_fits[3], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, pulse_shape=True, 
-                                      beam_11MeV=False, multiplot=True, save_multiplot=True)
+                                      beam_11MeV=False, multiplot=True, save_multiplot=False)
 
     ## polar interpolation
     if polar_plots:
@@ -3696,6 +3869,10 @@ def main():
                           beam_11MeV=True, pulse_shape=False, save_plot=False)
         lambertian_smooth(sin_fits[2], sin_fits[3], (fin[2], fin[3]), dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, 
                           beam_11MeV=False, pulse_shape=False, save_plot=False)
+    
+    if save_to_text:
+        text_file_data(fin, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, pulse_shape=True, measured=False, smoothed=True)
+
 
 if __name__ == '__main__':
     # check 3d scatter plots for both crystals
@@ -3709,7 +3886,7 @@ if __name__ == '__main__':
     smooth_tilt = False
 
     # compare a_axis recoils (all tilts measure ql along a-axis)
-    compare_a_axes = True
+    compare_a_axes = False
 
     # plots a/c' and a/b ql or pulse shape ratios from 0deg measurements
     ratios_plot = False
@@ -3757,5 +3934,8 @@ if __name__ == '__main__':
     # Lambertian projection
     lambertian_proj = False
     lambertian_smoothed = False
+
+    # save measured data
+    save_to_text = True
 
     main()
