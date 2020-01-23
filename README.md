@@ -137,4 +137,7 @@
 * 8/26/2019
     * updated several plots for LBNL
     * added make_gifs.py to show LO of all energies
+
+* 1/23/2020
+    * added global_fit.py to parametrize LO and PSP with direction
           

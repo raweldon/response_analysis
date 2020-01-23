@@ -726,7 +726,7 @@ def heatmap_multiplot(x, y, z, data, theta_n, d, cwd, save_multiplot, pulse_shap
             surf = mlab.pipeline.surface(tri_smooth, colormap='viridis')
             mlab.axes(pts, xlabel='a', ylabel='b', zlabel='c\'')
             if pulse_shape:
-                mlab.colorbar(surf, orientation='vertical')
+                mlab.colorbar(surf, orientation='vertical', title='PSP')
             else:
                 mlab.colorbar(surf, orientation='vertical', title='MeVee')  
             mlab.view(azimuth=az, elevation=el, distance=7.5, figure=fig)
@@ -3577,8 +3577,11 @@ def lambertian_smooth(fin1, fin2, fin, dets, bvert_tilt, cpvert_tilt, b_up, cp_u
     plt.show()
 
 def text_file_data(fin, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, pulse_shape, measured, smoothed):
-    ''' Plots the heatmap for a hemishpere of measurements
-        Full sphere is made by plotting a mirror image of the hemiphere measurements
+    ''' Puts LO and PSP data into text files by recoil proton energy
+        Text file columns:
+            Measured: param, x, y, z, E_p, crystal
+            Smoothed: param, x, y, x, E_p
+        
     '''
 
     fs = ((fin[0], fin[1]), (fin[2], fin[3]))
@@ -3638,17 +3641,17 @@ def text_file_data(fin, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi
                     qs = np.concatenate([df_b_mapped.qs_mean.values, df_b_mapped_mirror.qs_mean.values, df_cp_mapped.qs_mean.values, df_cp_mapped_mirror.qs_mean.values])
                     qs = qs[indices]
                     ps = [1 - a/b for a, b in zip(qs, ql)]
-                    data = np.array([ps, x, y, z, crystal])
+                    data = np.array([ps, x, y, z, np.array([det_energies[d]]*len(x)), crystal])
                     file_path = cwd + '/text_data/psp_' + str(int(det_energies[d]*100)) + 'keV_' + gain + '_measured.txt'
 
                 else:
-                    data = np.array([ql, x, y, z, np.array(crystal)])
+                    data = np.array([ql, x, y, z, np.array([det_energies[d]]*len(x)), np.array(crystal)])
                     file_path = cwd + '/text_data/lo_' + str(int(det_energies[d]*100)) + 'keV_' + gain + '_measured.txt'    
 
                 # save data to ascii file
                 data = data.T
                 with open(file_path, 'w') as save_file:
-                    np.savetxt(save_file, data, fmt=['%s','%s','%s','%s', '%s'])
+                    np.savetxt(save_file, data, fmt=['%s','%s','%s','%s', '%s', '%s'])
 
                 print '\ndata saved to', file_path             
 
@@ -3734,7 +3737,7 @@ def text_file_data(fin, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi
                 x, y, z = xyz.T
 
                 # save data to ascii file
-                data = np.array([ql, x, y, z])
+                data = np.array([ql, x, y, z, np.array([det_energies[d]]*len(x))])
 
                 if pulse_shape:
                     file_path = cwd + '/text_data/psp_' + str(int(det_energies[d]*100)) + 'keV_' + gain + '_smoothed.txt'
@@ -3743,11 +3746,10 @@ def text_file_data(fin, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi
 
                 data = data.T
                 with open(file_path, 'w+') as save_file:
-                    np.savetxt(save_file, data, fmt=['%.4f','%.12f','%.12f','%.12f' ])
+                    np.savetxt(save_file, data, fmt=['%.4f','%.12f','%.12f','%.12f', '%.4f' ])
 
                 print '\ndata saved to', file_path                  
                     
-
 def main():
     cwd = os.getcwd()
     p_dir = cwd + '/pickles/'
@@ -3836,7 +3838,7 @@ def main():
     # plots smoothed data from smooth_tilt()
     sin_fits = ['bvert_11MeV_sin_params_smoothed.p', 'cpvert_11MeV_sin_params_smoothed.p', 'bvert_4MeV_sin_params_smoothed.p', 'cpvert_4MeV_sin_params_smoothed.p']                     
     if smoothed_fitted_heatmap_11:
-        plot_smoothed_fitted_heatmaps(sin_fits[0], sin_fits[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, pulse_shape=True, 
+        plot_smoothed_fitted_heatmaps(sin_fits[0], sin_fits[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, pulse_shape=False, 
                                       beam_11MeV=True, multiplot=True, save_multiplot=False)
     if smoothed_fitted_heatmap_4:
         plot_smoothed_fitted_heatmaps(sin_fits[2], sin_fits[3], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, pulse_shape=True, 
@@ -3871,7 +3873,7 @@ def main():
                           beam_11MeV=False, pulse_shape=False, save_plot=False)
     
     if save_to_text:
-        text_file_data(fin, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, pulse_shape=True, measured=False, smoothed=True)
+        text_file_data(fin, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, pulse_shape=True, measured=True, smoothed=True)
 
 
 if __name__ == '__main__':
