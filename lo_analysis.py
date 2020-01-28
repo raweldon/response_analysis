@@ -3931,13 +3931,13 @@ if __name__ == '__main__':
     lsq_sph_biv_spline = False
 
     # legendre polynomial fit
-    legendre_poly = False
+    legendre_poly = True
 
     # Lambertian projection
     lambertian_proj = False
     lambertian_smoothed = False
 
     # save measured data
-    save_to_text = True
+    save_to_text = False
 
     main()

@@ -12,6 +12,7 @@ import symfit
 from symfit import exp
 import time
 import random
+from scipy.special import lpmv
 
 start_time = time.time()
 cwd = os.getcwd()
@@ -39,6 +40,7 @@ def fit(E_p, a, b, c, d):
     return a*E_p - b*(1-np.exp(-c*E_p**d))
 
 def individual_fit(sorted_dfs):
+    ''' fit lo vs ep individually for all directions '''
 
     exp_model = lmfit.Model(fit)
     params = exp_model.make_params(a=0.76, b=2.8, c=0.25, d=0.98)
@@ -101,11 +103,25 @@ def individual_fit(sorted_dfs):
     fig.colorbar(p)
 
 def symfit_global_fit(sorted_dfs, E_p):
+    ''' attempted global fit with symfit
+        not working...
+    '''
+    dfs = sorted_dfs
+    sorted_dfs = []
+    for i in range(10):
+        sorted_dfs.append(random.choice(dfs))   
 
-    # global fit
+    print('\nPerforming global fit on %i directions with symfit\n' % len(sorted_dfs))
+
     eps = symfit.variables(', '.join('ep_{}'.format(i) for i in range(len(sorted_dfs))))
     los = symfit.variables(', '.join('lo_{}'.format(i) for i in range(len(sorted_dfs))))
     a, d = symfit.parameters('a, d')
+    a.value = 0.74
+    a.max = 1
+    a.min = 0.5
+    d.value = 0.98
+    d.max = 1.1
+    d.min = 0.9
     bs = symfit.parameters(', '.join('b_{}'.format(i) for i in range(len(sorted_dfs))))
     cs = symfit.parameters(', '.join('c_{}'.format(i) for i in range(len(sorted_dfs))))
 
@@ -125,9 +141,13 @@ def symfit_global_fit(sorted_dfs, E_p):
 
     fit = symfit.Fit(model_dict, **data)
     fit_result = fit.execute()
-    print( fit_result.value(a))
+    print( fit_result)
 
 def lmfit_global_fit(sorted_dfs, E_p, save_results):
+    ''' global fit of Lo vs E_p for all directions
+        a, d are shared between all directions
+        b, c are unique for each direction
+    '''
 
     def fit_dataset(params, i, x):
         a = params['a_%i' % (i)]
@@ -149,16 +169,19 @@ def lmfit_global_fit(sorted_dfs, E_p, save_results):
         # now flatten this to a 1D array, as minimize() needs
         return resid.flatten()
 
-    # dfs = sorted_dfs
-    # sorted_dfs = []
-    # for i in range(100):
-    #     sorted_dfs.append(random.choice(dfs))
+    dfs = sorted_dfs
+    sorted_dfs = []
+    for i in range(10):
+        sorted_dfs.append(random.choice(dfs))
 
-    print('\nPerforming global fit with lmfit\n')
+    print('\nPerforming global fit on %i directions with lmfit\n' % len(sorted_dfs))
     x_data = np.array(E_p)
-    y_data = []
+    y_data, xs, ys, zs = [], [], [], []
     for idx, sorted_df in enumerate(sorted_dfs):
         y_data.append(list(sorted(sorted_df.param.values)))
+        xs.append(sorted_df.iloc[0]['x'])
+        ys.append(sorted_df.iloc[0]['y'])
+        zs.append(sorted_df.iloc[0]['z'])
     y_data = np.array(y_data)
 
     fit_params = lmfit.Parameters()
@@ -174,13 +197,26 @@ def lmfit_global_fit(sorted_dfs, E_p, save_results):
         fit_params['d_%i' % idx].expr = 'd_0'
 
     res = lmfit.minimize(objective, fit_params, args=(x_data, y_data))
-    lmfit.report_fit(res.params, show_correl=False)
+    #lmfit.report_fit(res.params, show_correl=False)
 
     if save_results:
-        results = []
+        results_a, results_b, results_c, results_d = [], [], [], []
+        idx = 0
         for name, par in res.params.items():
-            results.append((name, par.value, par.stderr))
-        np.save(cwd + '/pickles/lmfit_results', np.array(results))
+            if 'a_' in name: 
+                results_a.append((name, par.value, par.stderr, xs[idx], ys[idx], zs[idx]))
+            if 'b_' in name: 
+                results_b.append((name, par.value, par.stderr, xs[idx], ys[idx], zs[idx]))
+            if 'c_' in name: 
+                results_c.append((name, par.value, par.stderr, xs[idx], ys[idx], zs[idx]))
+            if 'd_' in name: 
+                results_d.append((name, par.value, par.stderr, xs[idx], ys[idx], zs[idx]))
+                idx += 1
+        print('\n\n\n', len(results_b))
+        np.save(cwd + '/pickles/lmfit_results', np.array([results_a, results_b, results_c, results_d]))
+        np.save(cwd + '/pickles/lmfit_res_covar', res.covar)
+        np.save(cwd + '/pickles/lmfit_res_var_names', res.var_names)
+        #lmfit.model.save_modelresult(res, 'lmfit_model_result.sav') # doesn't work...
 
     colors = cm.viridis(np.linspace(-1, 1, len(sorted_dfs)))
     plt.figure()
@@ -188,6 +224,331 @@ def lmfit_global_fit(sorted_dfs, E_p, save_results):
         y_fit = fit_dataset(res.params, i, x_data)
         plt.plot(x_data, y_data[i, :], 'o', color=colors[i])
         plt.plot( x_data, y_fit, '--', color=colors[i], alpha=0.6)  
+
+def legendre_poly_param_fit_same_coeffs(sorted_dfs):
+
+    def get_coeff_names(order, central_idx_only):
+        ''' return list of coefficient names for a given order
+            set central_idx_only = True if only using central index terms
+            set range in lmfit section to plot desired order of sph harmonics
+        '''
+        names, order_coeff = [], []
+
+        if central_idx_only:
+            for o in range(0, order + 1):
+                names.append('c_' + str(o) + str(o))
+                order_coeff.append((o, o))
+            return names, order_coeff
+        # else:
+        #     for o in range(0, order + 1):
+        #         coeff_no = 2*o + 1
+        #         idx = coeff_no - o - 1
+        #         for i in range(0, coeff_no):
+        #             names.append('c_' + str(i) + str(o))
+        #             order_coeff.append((o, i - idx)) # n, m
+        #             print( order_coeff)
+        #     return names, order_coeff
+
+        # positive orders only
+        else:
+            for o in range(0, order + 1):
+                coeff_no = o + 1
+                idx = coeff_no - o - 1
+                for i in range(0, coeff_no):
+                    names.append('c_' + str(i) + str(o))
+                    order_coeff.append((o, i - idx)) # n, m
+            # for c, n in zip(order_coeff, names):
+            #     print( c, n)
+            return names, order_coeff
+
+    def add_params(names_t, names_p):
+        # create parameter argument for lmfit
+        fit_params = lmfit.Parameters()
+        for t, p in zip(names_t, names_p):
+            fit_params.add(t, value=0.5)
+            fit_params.add(p, value=0.5)
+        return fit_params
+
+    def minimize(fit_params, *args):
+        vals, theta, phi, names_t, names_p, order_coeff = args
+
+        pars = fit_params.valuesdict()
+        legendre_t, legendre_p = 0, 0
+        for name_t, name_p, oc in zip(names_t, names_p, order_coeff):
+            ct = pars[name_t]
+            cp = pars[name_p]
+            legendre_t += ct*lpmv(oc[1], oc[0], np.cos(theta))  # oc[0] = n (degree n>=0), oc[1] = m (order |m| <= n)
+            legendre_p += cp*lpmv(oc[1], oc[0], np.sin(phi)) # real value of spherical hamonics
+
+        legendre = legendre_t * legendre_p
+        return vals - legendre
+
+    a_data, b_data, c_data, d_data = np.load(cwd + '/pickles/lmfit_results.npy', allow_pickle=True)
+    df_a = pd.DataFrame(a_data, columns=['params', 'val', 'stderr', 'x', 'y', 'z'])
+    df_b = pd.DataFrame(b_data, columns=['params', 'val', 'stderr', 'x', 'y', 'z'])
+    df_c = pd.DataFrame(c_data, columns=['params', 'val', 'stderr', 'x', 'y', 'z'])
+    df_d = pd.DataFrame(d_data, columns=['params', 'val', 'stderr', 'x', 'y', 'z'])
+
+    xs = np.array([float(x) for x in df_b.x.values])
+    ys = np.array([float(y) for y in df_b.y.values])
+    zs = np.array([float(z) for z in df_b.z.values])
+    thetas, phis = cartesian_to_spherical(xs, ys, zs)
+
+    vals = [float(i) for i in df_b.val.values]
+
+    for i in range(1, 14):
+    #for i in [1, 11]:
+        print( '\norder = %i' % i)
+        order = i
+        # generate coefficients for phi and theta terms
+        names_p, order_coeff_p = get_coeff_names(order, central_idx_only=True)
+        names_t, order_coeff_t = get_coeff_names(order, central_idx_only=True)
+        fit_params = add_params(names_t, names_p)
+        #fit_kws={'nan_policy': 'omit'}
+        res = lmfit.minimize(minimize, fit_params, args=(vals, thetas, phis, names_t, names_p, order_coeff_t))
+        print( '\n', res.message)
+        print( lmfit.fit_report(res, show_correl=False))
+
+        leg_poly_t, leg_poly_p = 0, 0
+        for idx, (name, par) in enumerate(res.params.items()):
+            leg_poly_t += par.value*lpmv(order_coeff_t[idx][1], order_coeff_t[idx][0], np.cos(thetas))
+            leg_poly_p += par.value*lpmv(order_coeff_t[idx][1], order_coeff_t[idx][0], np.sin(phis))
+            #print leg_poly_t
+        legendre_poly_fit = leg_poly_t * leg_poly_p
+        legendre_poly_sorted = sorted(legendre_poly_fit)
+        vals_idx = np.argsort(vals)
+
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        p = ax.scatter(xs[vals_idx], ys[vals_idx], zs[vals_idx], c=legendre_poly_sorted)
+        ax.set_title('b')
+        fig.colorbar(p)
+
+        #for v, l in zip(sorted(vals), legendre_poly_sorted):
+        #    print( '%8.3f %8.3f' % (v, l))
+
+        print( '\n\n max_fit  min_fit  max_legen  min_legen')
+        print( '%8.4f %8.4f %8.4f %10.4f' % (max(vals), min(vals), max(legendre_poly_sorted), min(legendre_poly_sorted)))
+
+    print('\nmean std = %6.4f' % np.mean([float(x) for x in df_b.stderr.values]))
+
+def legendre_poly_param_fit_diff_coeffs(sorted_dfs, orders):
+    def get_coeff_names(order, name, central_idx_only):
+        ''' return list of coefficient names for a given order
+            set central_idx_only = True if only using central index terms
+            set range in lmfit section to plot desired order of sph harmonics
+        '''
+        names, order_coeff = [], []
+
+        if central_idx_only:
+            for o in range(0, order + 1):
+                names.append(name + str(o) + str(o))
+                order_coeff.append((o, o))
+            return names, order_coeff
+        # else:
+        #     for o in range(0, order + 1):
+        #         coeff_no = 2*o + 1
+        #         idx = coeff_no - o - 1
+        #         for i in range(0, coeff_no):
+        #             names.append(name + str(i) + str(o))
+        #             order_coeff.append((o, i - idx)) # n, m
+        #             print( order_coeff)
+        #     return names, order_coeff
+
+        # positive orders only
+        else:
+            for o in range(0, order + 1):
+                coeff_no = o + 1
+                idx = coeff_no - o - 1
+                for i in range(0, coeff_no):
+                    names.append(name + str(i) + str(o))
+                    order_coeff.append((o, i - idx)) # n, m
+            # for c, n in zip(order_coeff, names):
+            #     print( c, n)
+            return names, order_coeff
+
+    def add_params(names_t, names_p):
+        # create parameter argument for lmfit
+        fit_params = lmfit.Parameters()
+        for t, p in zip(names_t, names_p):
+            fit_params.add(t, value=1)
+            fit_params.add(p, value=1)
+        return fit_params
+
+    def minimize(fit_params, *args):
+        vals, theta, phi, names_t, names_p, order_coeff = args
+
+        pars = fit_params.valuesdict()
+        legendre_t, legendre_p = 0, 0
+        for name_t, name_p, oc in zip(names_t, names_p, order_coeff):
+            ct = pars[name_t]
+            cp = pars[name_p]
+            legendre_t += ct*lpmv(oc[1], oc[0], np.cos(theta))  # oc[0] = n (degree n>=0), oc[1] = m (order |m| <= n)
+            legendre_p += cp*lpmv(oc[1], oc[0], np.sin(oc[1] * phi)) # real value of spherical hamonics
+
+        legendre = legendre_t * legendre_p
+        return vals - legendre
+
+    a_data, b_data, c_data, d_data = np.load(cwd + '/pickles/lmfit_results.npy', allow_pickle=True)
+    df_a = pd.DataFrame(a_data, columns=['params', 'val', 'stderr', 'x', 'y', 'z'])
+    df_b = pd.DataFrame(b_data, columns=['params', 'val', 'stderr', 'x', 'y', 'z'])
+    df_c = pd.DataFrame(c_data, columns=['params', 'val', 'stderr', 'x', 'y', 'z'])
+    df_d = pd.DataFrame(d_data, columns=['params', 'val', 'stderr', 'x', 'y', 'z'])
+
+    xs = np.array([float(x) for x in df_b.x.values])
+    ys = np.array([float(y) for y in df_b.y.values])
+    zs = np.array([float(z) for z in df_b.z.values])
+    thetas, phis = cartesian_to_spherical(xs, ys, zs)
+
+    vals = [float(i) for i in df_b.val.values]
+
+    for i in orders: # over 11 is overkill
+    #for i in [1, 11]:
+        print( '\norder = %i' % i)
+        order = i
+        # generate coefficients for phi and theta terms
+        names_p, order_coeff_p = get_coeff_names(order, name='p_', central_idx_only=True)
+        names_t, order_coeff_t = get_coeff_names(order, name='t_', central_idx_only=True)
+        fit_params = add_params(names_t, names_p)
+        #fit_kws={'nan_policy': 'omit'}
+        res = lmfit.minimize(minimize, fit_params, args=(vals, thetas, phis, names_t, names_p, order_coeff_t))
+        print( '\n', res.message)
+        print( lmfit.fit_report(res, show_correl=False))
+
+        leg_poly_t, leg_poly_p, t_idx, p_idx = 0, 0, 0, 0
+        for idx, (name, par) in enumerate(res.params.items()):
+            if 't_' in name:
+                #print(name, par.value)
+                leg_poly_t += par.value*lpmv(order_coeff_t[t_idx][1], order_coeff_t[t_idx][0], np.cos(thetas))
+                t_idx += 1
+            elif 'p_' in name:
+                #print(name, par.value)
+                leg_poly_p += par.value*lpmv(order_coeff_p[p_idx][1], order_coeff_p[p_idx][0], np.sin(order_coeff_p[p_idx][1]*phis))
+                p_idx += 1
+            else:
+                print('name is ', name)
+        legendre_poly_fit = leg_poly_t * leg_poly_p
+        legendre_poly_sorted = sorted(legendre_poly_fit)
+        vals_idx = np.argsort(vals)
+
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        p = ax.scatter(xs[vals_idx], ys[vals_idx], zs[vals_idx], c=legendre_poly_sorted)
+        ax.set_title('b')
+        fig.colorbar(p)
+
+        print( '\n\n max_fit  min_fit  max_legen  min_legen')
+        print( '%8.4f %8.4f %8.4f %10.4f' % (max(vals), min(vals), max(legendre_poly_sorted), min(legendre_poly_sorted)))
+
+    print('\nmax_val std = %6.4f' % [float(x) for x in df_b.stderr.values][np.argmax(vals)])
+    return legendre_poly_sorted, xs[vals_idx], ys[vals_idx], zs[vals_idx]
+
+def sph_harm_fit(sorted_dfs):
+    from scipy.special import sph_harm
+
+    def get_coeff_names(order, central_idx_only):
+        ''' return list of coefficient names for a given order
+            set central_idx_only = True if only using central index terms
+            set range in lmfit section to plot desired order of sph harmonics
+        '''
+        names, order_coeff = [], []
+
+        if central_idx_only:
+            for o in range(0, order + 1):
+                names.append('c_' + str(o) + str(o))
+                order_coeff.append((o, o))
+            return names, order_coeff
+        else:
+            for o in range(0, order + 1):
+                coeff_no = 2*o + 1
+                idx = coeff_no - o - 1
+                for i in range(0, coeff_no):
+                    names.append('c_' + str(i) + str(o))
+                    order_coeff.append((o, i - idx))
+            return names, order_coeff
+
+    def add_params(names):
+        # create parameter argument for lmfit
+        fit_params = lmfit.Parameters()
+        for name in names:
+            fit_params.add(name, value=1)
+        return fit_params
+
+    def minimize(fit_params, *args):
+        ql, theta, phi, names, order_coeff = args
+
+        pars = fit_params.valuesdict()
+        y_lm = 0
+        for name, (l, m) in zip(names, order_coeff):
+            c = pars[name]
+            #harmonics += c*sph_harm(oc[1], oc[0], theta, phi).real #oc[0] = n (degree n>=0), oc[1] = m (order |m| <= n)
+            if m < 0:
+                y_lm += c*lpmv(m, l, np.cos(theta))*np.sin(abs(m)*phi)
+            elif m == 0:
+                y_lm += c*lpmv(m, l, np.cos(theta))
+            else:
+                y_lm += c*lpmv(m, l, np.cos(theta))*np.cos(m*phi)
+            # if m < 0:
+            #     y_lm += c*lpmv(m, l, np.cos(theta))*np.sin(abs(m)*(phi + np.pi))
+            # elif m == 0:
+            #     y_lm += c*lpmv(m, l, np.cos(theta))
+            # else:
+            #     y_lm += c*lpmv(m, l, np.cos(theta))*np.cos(m*(phi + np.pi))
+        #harmonics = harmonics.real
+        return ql - y_lm
+
+    a_data, b_data, c_data, d_data = np.load(cwd + '/pickles/lmfit_results.npy', allow_pickle=True)
+    df_a = pd.DataFrame(a_data, columns=['params', 'val', 'stderr', 'x', 'y', 'z'])
+    df_b = pd.DataFrame(b_data, columns=['params', 'val', 'stderr', 'x', 'y', 'z'])
+    df_c = pd.DataFrame(c_data, columns=['params', 'val', 'stderr', 'x', 'y', 'z'])
+    df_d = pd.DataFrame(d_data, columns=['params', 'val', 'stderr', 'x', 'y', 'z'])
+
+    xs = np.array([float(x) for x in df_b.x.values])
+    ys = np.array([float(y) for y in df_b.y.values])
+    zs = np.array([float(z) for z in df_b.z.values])
+    thetas, phis = cartesian_to_spherical(xs, ys, zs)
+
+    vals = [float(i) for i in df_b.val.values]
+
+    for i in range(1, 20):
+    #for i in [1, 11]:
+        print( '\norder = %i' % i)
+        order = i
+        # generate coefficients for phi and theta terms
+        names, order_coeff = get_coeff_names(order, central_idx_only=True)
+        fit_params = add_params(names)
+        fit_kws={'nan_policy': 'omit'}
+        res = lmfit.minimize(minimize, fit_params, args=(vals, thetas, phis, names, order_coeff))
+        print( '\n', res.message)
+        print( lmfit.fit_report(res, show_correl=False))
+
+        y_lm = 0
+        for idx, (name, par) in enumerate(res.params.items()):
+            m = order_coeff[idx][1]
+            l = order_coeff[idx][0]
+            c = par.value
+            #sph_harmonics += par.value*sph_harm(order_coeff[idx][1], order_coeff[idx][0], thetas, phis)
+            if m < 0:
+                y_lm += c*lpmv(m, l, np.cos(thetas))*np.sin(abs(m)*phis)
+            elif m == 0:
+                y_lm += c*lpmv(m, l, np.cos(thetas))
+            else:
+                y_lm += c*lpmv(m, l, np.cos(thetas))*np.cos(m*phis)
+            # if m < 0:
+            #     y_lm += c*lpmv(m, l, np.cos(thetas))*np.sin(abs(m)*(phis + np.pi))
+            # elif m == 0:
+            #     y_lm += c*lpmv(m, l, np.cos(thetas))
+            # else:
+            #     y_lm += c*lpmv(m, l, np.cos(thetas))*np.cos(m*(phis + np.pi))
+
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        p = ax.scatter(xs, ys, zs, c=y_lm)
+        ax.set_title('b')
+        fig.colorbar(p)
+
+        print( '\n\n max_fit  min_fit  max_legen  min_legen')
+        print( '%8.4f %8.4f %8.4f %10.4f' % (max(vals), min(vals), max(y_lm), min(y_lm)))
 
 def main():
     
@@ -213,7 +574,13 @@ def main():
 
     #individual_fit(sorted_dfs)    
     #symfit_global_fit(sorted_dfs, E_p)
-    lmfit_global_fit(sorted_dfs, E_p, save_results)
+    #lmfit_global_fit(sorted_dfs, E_p, save_results=False)
+    #legendre_poly_param_fit_same_coeffs(sorted_dfs)
+    #sph_harm_fit(sorted_dfs)
+
+    order = (11,)
+    legendre_fit, xs, ys, zs = legendre_poly_param_fit_diff_coeffs(sorted_dfs, order)
+
 
 
 if __name__ == '__main__':
