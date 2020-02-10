@@ -300,7 +300,7 @@ def smoothing_tilt(dets, pickle_name, cwd, p_dir, pulse_shape, delayed, prompt, 
             return res
 
     #            bvert11  bvert4 cpvert11 cpvert4
-    drift_uncs = [0.0085, 0.0027, 0.0113, 0.0055] # %, from /home/radians/raweldon/tunl.2018.1_analysis/stilbene_final/lo_calibration/cal_and_temp.out
+    drift_uncs = (0.032, 0.038, 0.01, 0.02)  # %, from /home/radians/raweldon/tunl.2018.1_analysis/stilbene_final/lo_calibration/cal_and_temp.out
     for f in pickle_name:
         if '11' in f:
             beam_11MeV = True
@@ -471,7 +471,7 @@ def smoothing_tilt(dets, pickle_name, cwd, p_dir, pulse_shape, delayed, prompt, 
                         # smoothed data plots
                         #plt.figure(fig_no[d] + 10, figsize=(16,8)) # dissertation
                         plt.figure(fig_no[d] + 10, figsize=(11,8)) # paper
-                        plt.errorbar(angles, smoothed_data, yerr=lo_unc, ecolor='black', markerfacecolor=color[tidx], fmt='o', 
+                        plt.errorbar(angles, smoothed_data, yerr=lo_unc, ecolor=color[tidx], markerfacecolor=color[tidx], fmt='o', 
                                     markeredgecolor='k', markeredgewidth=1, markersize=10, capsize=1, label=str(tilt) + '$^{\circ}$ mount')
                         plt.plot(x_vals, y_vals, '--', color=color[tidx])
                         # annotate
@@ -505,7 +505,7 @@ def smoothing_tilt(dets, pickle_name, cwd, p_dir, pulse_shape, delayed, prompt, 
                         # original data plots
                         #plt.figure(fig_no[d], figsize=(16,8)) # dissertation
                         plt.figure(fig_no[d], figsize=(11,8)) # paper
-                        plt.errorbar(angles, data, yerr=lo_unc, ecolor='black', markerfacecolor=color[tidx], fmt='o', 
+                        plt.errorbar(angles, data, yerr=lo_unc, ecolor=color[tidx], markerfacecolor=color[tidx], fmt='o', 
                                     markeredgecolor='k', markeredgewidth=1, markersize=10, capsize=1, label=str(tilt) + '$^{\circ}$ mount')
                         plt.plot(x_orig, y_orig, '--', color=color[tidx])
                         # annotate
@@ -1102,25 +1102,36 @@ def compare_a_axis_recoils(fin, dets, cwd, p_dir, plot_by_det, plot_lo_curves, s
         y = m*np.array(lo) + b
         return (y - new_b)/new_m
 
+    #                b11    cp11  b4    cp4
+    drift_uncs =  (0.032, 0.038, 0.01, 0.02) 
     a_qls, tilts_arr = [], []
     ql_means, ql_stds, E_p = [], [], []
     for f in fin:
+
         if '11' in f:
             beam_11MeV = True
             title2 = '11.33 MeV'
             En = 11.33
+            drift = drift_uncs[:2]
+            cal_unc = [0.01894, 0.01483, 0.00998, 0.00540, 0.00183, 0.00113]
+            cal_unc = cal_unc + cal_unc[::-1]
         else:
             beam_11MeV = False
             title2 = '4.83 MeV'
             En = 4.83
+            drift = drift_uncs[2:4]
+            cal_unc = [0.00792, 0.00553, 0.00284, 0.00154, 0.00267, 0.00372]
+            cal_unc = cal_unc + cal_unc[::-1]
         if 'bvert' in f:
             tilts = [0, 45, -45, 30, -30, 15, -15]
             shape = 'o'
             title = 'Crystal 1'
+            drift_unc = drift[0]
         else:
             tilts = [0, 30, -30, 15, -15]
             shape = '^'
             title = 'Crystal 3'
+            drift_unc = drift[1]
 
         data = pd_load(f, p_dir)
         data = split_filenames(data)
@@ -1136,7 +1147,7 @@ def compare_a_axis_recoils(fin, dets, cwd, p_dir, plot_by_det, plot_lo_curves, s
             bl_br = ['BL', 'BL', 'BL', 'BL', 'BL', 'BL', 'BR', 'BR', 'BR', 'BR', 'BR', 'BR']
             color = ['r', 'r', 'r', 'r', 'r', 'r', 'b', 'b', 'b', 'b', 'b', 'b']
             shapes = ['o', 'o', 'o', 'o', 'o', 'o', '^', '^', '^', '^', '^', '^']
-            print '\ndet   ql_mean    std   rel_uncert  max_variation'
+            print '\ndet   ql_mean    std   rel_uncert  stat_and_cal_unc'
             print '--------------------------------------------------'
             means, stds, E_ps = [], [], []
             for d, det in enumerate(dets):
@@ -1148,15 +1159,16 @@ def compare_a_axis_recoils(fin, dets, cwd, p_dir, plot_by_det, plot_lo_curves, s
                 # calculate mean and std
                 ql_mean = det_df.ql.mean()
                 ql_std = det_df.ql.std()#/np.sqrt(len(det_df.ql.values)) # uncertainty on the mean
-                print '{:^4} {:>8} {:>8} {:>8}% {:>8.2f}%'.format(det, round(ql_mean, 3), round(ql_std, 3), round(ql_std/ql_mean, 4)*100, 
-                                                               (max(det_df.ql.values) - min(det_df.ql.values))/(max(det_df.ql.values) + min(det_df.ql.values))*200)
+                stat_and_cal_unc = [np.sqrt((drift_unc*q)**2 + u**2 + cal_unc[d]**2) for q, u in zip(det_df.ql.values, det_df.abs_uncert.values)]
+
+                print '{:^4} {:>8} {:>8} {:>8}% {:>8.4f}%'.format(det, round(ql_mean, 3), round(ql_std, 3), round(ql_std/ql_mean, 4)*100, np.mean(stat_and_cal_unc)/ql_mean*100)
 
                 means.append(ql_mean)
                 stds.append(ql_std)
 
                 # plot lo vs mount angle
                 plt.figure(fig_no[d], figsize=(10,7))
-                plt.errorbar(det_df.tilt.values, det_df.ql.values, yerr=det_df.abs_uncert.values, ecolor='black', markerfacecolor='None', fmt=shapes[d], 
+                plt.errorbar(det_df.tilt.values, det_df.ql.values, yerr=stat_and_cal_unc, ecolor='black', markerfacecolor='None', fmt=shapes[d], 
                                 markeredgecolor=color[d], markeredgewidth=1, markersize=14, capsize=1, label=str(det_energies[d]) + ' MeV recoil, ' + str(bl_br[d]), zorder=10)
                 xvals = np.linspace(-47, 47, 10)
                 plt.plot(xvals, [ql_mean]*10, color=color[d])#, label=str(det_angles[d]) + '$^{\circ}$ ' + str(bl_br[d]) + ' mean')
@@ -1214,12 +1226,16 @@ def compare_a_axis_recoils(fin, dets, cwd, p_dir, plot_by_det, plot_lo_curves, s
     # plot average lo curve (with statistical uncerts)
     ## group data, only use BL data
     if plot_lo_curves:
+        cal_unc_4 = [0.00792, 0.00553, 0.00284, 0.00154, 0.00267, 0.00372]
+        cal_unc_11 = [0.01894, 0.01483, 0.00998, 0.00540, 0.00183, 0.00113]
         ql_bvert = ql_means[0][:6] + ql_means[2][:6]
-        ql_stds_bvert = ql_stds[0][:6] + ql_stds[2][:6]
+        ql_stds_bvert = [np.sqrt(s**2 + (drift_uncs[2]*q)**2 + c**2) for s, q, c in zip(ql_stds[0][:6], ql_means[0][:6], cal_unc_4)] +   \
+                        [np.sqrt(s**2 + (drift_uncs[0]*q)**2 + c**2) for s, q, c in zip(ql_stds[2][:6], ql_means[2][:6], cal_unc_4)]
         Ep = E_p[0][:6] + E_p[2][:6]
 
         ql_cpvert = ql_means[1][:6] + ql_means[3][:6]
-        ql_stds_cpvert = ql_stds[1][:6] + ql_stds[3][:6]
+        ql_stds_cpvert = [np.sqrt(s**2 + (drift_uncs[3]*q)**2 + c**2) for s, q, c in zip(ql_stds[1][:6], ql_means[1][:6], cal_unc_11)] +   \
+                         [np.sqrt(s**2 + (drift_uncs[1]*q)**2 + c**2) for s, q, c in zip(ql_stds[3][:6], ql_means[3][:6], cal_unc_11)]
         #Ep = E_p[0] + E_p[2]
 
         plt.figure(100)
@@ -1235,21 +1251,22 @@ def compare_a_axis_recoils(fin, dets, cwd, p_dir, plot_by_det, plot_lo_curves, s
         plt.legend(loc=4, fontsize=14)
         plt.tight_layout()
 
-        plt.figure(101)
-        plt.errorbar(Ep, ql_bvert, yerr=ql_stds_bvert, ecolor='r', markerfacecolor='None', fmt='None', 
-            markeredgecolor='r', markeredgewidth=3, markersize=10, capsize=3, elinewidth=2, label= 'a-axis, crystal 1')
-        plt.errorbar(Ep, ql_cpvert, yerr=ql_stds_cpvert, ecolor='b', markerfacecolor='None', fmt='None', 
-            markeredgecolor='b', markeredgewidth=3, markersize=10, capsize=3, elinewidth=2, label= 'a-axis, crystal 2')
-        plt.xlim(0.5, 12)
-        plt.ylim(0.09, 6)
-        plt.xscale('log')
-        plt.yscale('log')
-        plt.xlabel('Proton energy deposition (MeV)', fontsize=16)
-        plt.ylabel('Light output (MeVee)', fontsize=16)
-        plt.xticks(fontsize=14)
-        plt.yticks(fontsize=14)
-        plt.legend(loc=4, fontsize=14)
-        plt.tight_layout()
+        # log log plot - doesn't look good
+        # plt.figure(101)
+        # plt.errorbar(Ep, ql_bvert, yerr=ql_stds_bvert, ecolor='r', markerfacecolor='None', fmt='None', 
+        #     markeredgecolor='r', markeredgewidth=3, markersize=10, capsize=3, elinewidth=2, label= 'a-axis, crystal 1')
+        # plt.errorbar(Ep, ql_cpvert, yerr=ql_stds_cpvert, ecolor='b', markerfacecolor='None', fmt='None', 
+        #     markeredgecolor='b', markeredgewidth=3, markersize=10, capsize=3, elinewidth=2, label= 'a-axis, crystal 2')
+        # plt.xlim(0.5, 12)
+        # plt.ylim(0.09, 6)
+        # plt.xscale('log')
+        # plt.yscale('log')
+        # plt.xlabel('Proton energy deposition (MeV)', fontsize=16)
+        # plt.ylabel('Light output (MeVee)', fontsize=16)
+        # plt.xticks(fontsize=14)
+        # plt.yticks(fontsize=14)
+        # plt.legend(loc=4, fontsize=14)
+        # plt.tight_layout()
 
         if save_plots:
             plt.savefig(cwd + '/figures/compare_a_axis/avg_a_axis_lo_curves_paper.pdf')
@@ -1802,7 +1819,8 @@ def plot_acp_lo_curves(fin, dets, cwd, p_dir, pulse_shape, bl_only, plot_fit_dat
         a_axis_unc_bvert11, a_axis_unc_cpvert11, a_axis_unc_bvert4, a_axis_unc_cpvert4 = pickle.load( open(p_dir + 'a_axis_lo_stds.p', 'rb')) # MeVee, from compare_a_axis_recoils
         #               b11      cp11     b4     cp4
         #drift_uncs =  (0.0085, 0.0113, 0.0027, 0.0055) # percent, from /home/radians/raweldon/tunl.2018.1_analysis/stilbene_final/lo_calibration/cal_and_temp_changes.py
-        drift_uncs =  (0.015, 0.015, 0.0027, 0.0055) #0.015 accounts for 3% separation (lack of aging)
+        #drift_uncs =  (0.015, 0.015, 0.0027, 0.0055) #0.015 accounts for 3% separation (lack of aging) - values published in thesis
+        drift_uncs =  (0.032, 0.038, 0.01, 0.02) # full variation - used in paper
 
         if '11' in f:
             beam_11MeV = True
@@ -2066,7 +2084,7 @@ def acp_lo_curves_fits(fin, dets, cwd, p_dir, match_data, plot_meas_data, plot_s
         return ql_maxs, ql_mins
 
 
-    with open(p_dir + 'lo_curve_vals.p', 'r') as f:
+    with open(p_dir + 'lo_curve_vals.p', 'r') as f: # from plot_acp_lo_curves
         data = pd.read_pickle(f)
 
     data = pd.DataFrame(data).transpose()
@@ -3298,8 +3316,10 @@ def lambertian(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, 
 
     plt.show()
 
-def get_avg_lo_uncert(fin1, fin2, p_dir, dets, beam_11MeV, pulse_shape):
-    ''' Apply uncertainty from the calibration and measurement system (EJ-228 systematics) to averaged results
+def get_avg_lo_uncert_thesis(fin1, fin2, p_dir, dets, beam_11MeV, pulse_shape):
+    ''' Uncerts used in disseration - poorly though out, should have used maximum drift uncerts to cover all light output uncertainties
+    
+        Apply uncertainty from the calibration and measurement system (EJ-228 systematics) to averaged results
         Calculates the average uncertainty on the light output and PSP for a given recoil proton energy
         BL BR average code is commented out -- results are nearly identical to only BL
         9/9/19 - included 0.3% uncertainty introduced by rotation stage (/home/radians/raweldon/tunl.2018.1_analysis/plastic_analysis/final_analysis/analysis_lo)
@@ -3407,6 +3427,81 @@ def get_avg_lo_uncert(fin1, fin2, p_dir, dets, beam_11MeV, pulse_shape):
         #    print i, j, k, j/k*100, '%'
         return total_uncerts, mean_qls, uncerts, cal_uncerts
 
+def get_avg_lo_uncert(fin1, fin2, p_dir, dets, beam_11MeV, pulse_shape):
+    ''' Apply uncertainty from the calibration and measurement system (EJ-228 systematics) to averaged results
+        Calculates the average uncertainty on the light output and PSP for a given recoil proton energy
+        BL BR average code is commented out -- results are nearly identical to only BL
+    '''
+    data_bvert = pd_load(fin1, p_dir)
+    data_bvert = split_filenames(data_bvert)
+    data_cpvert = pd_load(fin2, p_dir)
+    data_cpvert = split_filenames(data_cpvert)
+
+    if beam_11MeV:
+        drift_unc = (0.038 + 0.032)/2. # average of maximum drift uncs for low gain mode data
+        # ps_unc - statistical uncertainty of 1-qs/ql (used cpvert uncert - worse than bvert)
+        # from /home/radians/raweldon/tunl.2018.1_analysis/stilbene_final/peak_localization/pulse_shape_get_hotspots.py  
+        ps_unc = [0.00175, 0.00135, 0.00125, 0.00126, 0.0014, 0.00198, 0.00195, 0.0014, 0.00124, 0.00123, 0.00134, 0.00177]
+        # cal_unc - uncert due to change in calibration over experiment (used cpvert uncert - worse than bvert)
+        # from /home/radians/raweldon/tunl.2018.1_analysis/stilbene_final/lo_calibration/uncert_gamma_cal.py 
+        #cal_unc = [0.00792, 0.00540, 0.00285, 0.00155, 0.00271, 0.00372, 0.00375, 0.00275, 0.00156, 0.00278, 0.00540, 0.00800] # fuck up
+        cal_unc = [0.01894, 0.01483, 0.00998, 0.00540, 0.00183, 0.00113]
+
+    else:
+        drift_unc = (0.01 + 0.02)/2. # average of maximum drift uncs for high gain mode data
+        ps_unc = [0.00164, 0.00142, 0.00142, 0.00147, 0.0018, 0.00306, 0.0031, 0.00179, 0.00143, 0.00142, 0.00142, 0.0016]
+        #cal_unc = [0.01920, 0.01502, 0.01013, 0.00541, 0.00176, 0.00116, 0.00116, 0.00185, 0.00552, 0.01025, 0.01506, 0.01935] # fuck up
+        cal_unc = [0.00792, 0.00553, 0.00284, 0.00154, 0.00267, 0.00372]
+
+    # only use BL
+    uncert, mean_ql, mean_ps = [], [], []
+    for data in (data_bvert, data_cpvert):
+        for d, det in enumerate(dets):
+            if d > 5:
+                continue
+            if pulse_shape:
+                det_df = data.loc[(data.det_no == str(det))]
+                #print det, det_df.ql_abs_uncert.mean(), det_df.ql_abs_uncert.max(), det_df.ql_abs_uncert.median()
+                uncert.append(ps_unc[d])
+                #mean_ql.append(1 - (det_df.qs_mean.mean()/det_df.ql_mean.mean()))
+                mean_ps.append(det_df.qs_mean.mean()/det_df.ql_mean.mean())
+                mean_ql.append(det_df.ql_mean.mean())
+            else:
+                det_df = data.loc[(data.det_no == str(det))]
+                #print det, det_df.ql_abs_uncert.mean(), det_df.ql_abs_uncert.max(), det_df.ql_abs_uncert.median()
+                uncert.append(det_df.ql_abs_uncert.mean())
+                mean_ql.append(det_df.ql_mean.mean())
+    
+    uncerts = uncert
+    mean_qls = mean_ql
+    mean_pss = mean_ps
+
+    if pulse_shape:
+        cal_unc = [c/q for c, q in zip(cal_unc, mean_qls)]
+        #print cal_unc
+        if beam_11MeV:
+            total_uncerts = [np.sqrt((c*q)**2 + u**2 + (drift_unc*q)**2) for c, q, u, m in zip(cal_unc, mean_pss, uncerts, mean_qls)]
+            cal_uncerts = [np.sqrt((c*q)**2 + u**2) for c, q, u in zip(cal_unc, mean_pss, uncerts)]
+        else:
+            total_uncerts = [np.sqrt((c*q)**2 + u**2 + (drift_unc*q)**2) for c, q, u, m in zip(cal_unc, mean_pss, uncerts, mean_qls)]
+            cal_uncerts = [np.sqrt((c*q)**2 + u**2) for c, q, u in zip(cal_unc, mean_pss, uncerts)]
+        mean_pss= [1 - q for q in mean_qls]
+        return total_uncerts, mean_pss, uncerts, cal_uncerts
+
+    else:
+        if beam_11MeV:
+            #                     cal_unc stat   a-axis_meas  drift     
+            total_uncerts = [np.sqrt(c**2 + u**2 + (drift_unc*q)**2) for c, q, u in zip(cal_unc, mean_qls, uncerts)]
+            cal_uncerts = [np.sqrt(c**2 + u**2) for c, q, u in zip(cal_unc, mean_qls, uncerts)]
+        else:
+            #                     cal_unc stat    e
+            total_uncerts = [np.sqrt(c**2 + u**2 + (drift_unc*q)**2) for c, q, u in zip(cal_unc, mean_qls, uncerts)]
+            cal_uncerts = [np.sqrt(c**2 + u**2) for c, q, u in zip(cal_unc, mean_qls, uncerts)]
+
+        #for i, j, k in zip(uncerts, cal_uncerts, mean_qls):
+        #    print i, j, k, j/k*100, '%'
+        return total_uncerts, mean_qls, uncerts, cal_uncerts
+
 def lambertian_smooth(fin1, fin2, fin, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV, pulse_shape, save_plot):
     ''' 2D lambertian projection of the 3D spherical data
         Interpolation currently performed with griddata built in methods (linear (current), cubic, nearest)
@@ -3439,6 +3534,7 @@ def lambertian_smooth(fin1, fin2, fin, dets, bvert_tilt, cpvert_tilt, b_up, cp_u
     np.seterr(divide='ignore', invalid='ignore')
  
     avg_uncerts, avg_qls, abs_uncerts, cal_uncerts = get_avg_lo_uncert(fin[0], fin[1], p_dir, dets, beam_11MeV, pulse_shape) 
+
     if pulse_shape:
         f1 = fin1.split('.')
         fin1 = f1[0] + '_ps.' + f1[1]
@@ -3510,7 +3606,8 @@ def lambertian_smooth(fin1, fin2, fin, dets, bvert_tilt, cpvert_tilt, b_up, cp_u
             #print max(ql), min(ql), max(ql)/min(ql)
             plt.figure()
             plt.imshow(interp.T, extent=(-1,1,-1,1), origin='lower', cmap='viridis', interpolation='none')# , norm=LogNorm(vmin=0.07, vmax=5.36)) Log scale doesn't work 
-            plt.scatter(X, Y, c=ql, cmap='viridis')
+            if not save_plot:
+                plt.scatter(X, Y, c=ql, cmap='viridis')
             # put avg uncert on colorbar
             ## need to scale y from (0, 1) to (min(ql), max(ql))
             avg_uncert = avg_uncerts[d]/(max(ql) - min(ql))
@@ -3852,7 +3949,7 @@ def main():
 
     # comparison of ql for recoils along the a-axis
     if compare_a_axes:
-        compare_a_axis_recoils(fin, dets, cwd, p_dir, plot_by_det=True, plot_lo_curves=True, save_a_axis_lo_stds=False, save_plots=False)
+        compare_a_axis_recoils(fin, dets, cwd, p_dir, plot_by_det=True, plot_lo_curves=True, save_a_axis_lo_stds=False, save_plots=True)
 
     # plot ratios
     if ratios_plot:
@@ -3865,7 +3962,7 @@ def main():
         plot_acp_lo_curves(fin, dets, cwd, p_dir, pulse_shape=False, bl_only=True, plot_fit_data=False, smoothed_data=True, save_pickle=True)
     
     if acp_curves_fits:
-        acp_lo_curves_fits(fin, dets, cwd, p_dir, match_data=False, plot_meas_data=False, plot_smoothed_data=True, log_plot=False, save_plots=False)
+        acp_lo_curves_fits(fin, dets, cwd, p_dir, match_data=False, plot_meas_data=False, plot_smoothed_data=True, log_plot=True, save_plots=True)
         #acp_psp_curves_fits(fin, dets, cwd, p_dir, match_data=False, plot_meas_data=False, plot_smoothed_data=True, log_plot=False, save_plots=False)
 
     # 3d plotting
@@ -3911,10 +4008,10 @@ def main():
     sin_fits = ['bvert_11MeV_sin_params_smoothed.p', 'cpvert_11MeV_sin_params_smoothed.p', 'bvert_4MeV_sin_params_smoothed.p', 'cpvert_4MeV_sin_params_smoothed.p']                     
     if smoothed_fitted_heatmap_11:
         plot_smoothed_fitted_heatmaps(sin_fits[0], sin_fits[1], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, pulse_shape=False, 
-                                      beam_11MeV=True, multiplot=True, save_multiplot=False)
+                                      beam_11MeV=True, multiplot=True, save_multiplot=True)
     if smoothed_fitted_heatmap_4:
-        plot_smoothed_fitted_heatmaps(sin_fits[2], sin_fits[3], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, pulse_shape=True, 
-                                      beam_11MeV=False, multiplot=True, save_multiplot=False)
+        plot_smoothed_fitted_heatmaps(sin_fits[2], sin_fits[3], dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, pulse_shape=False, 
+                                      beam_11MeV=False, multiplot=True, save_multiplot=True)
 
     ## polar interpolation
     if polar_plots:
@@ -3988,8 +4085,8 @@ if __name__ == '__main__':
     avg_heatmap_4 = False
 
     # plot smoothed measured data
-    smoothed_fitted_heatmap_11 = False
-    smoothed_fitted_heatmap_4 =  False
+    smoothed_fitted_heatmap_11 = True
+    smoothed_fitted_heatmap_4 =  True
 
     # polar plots
     polar_plots = False
