@@ -4008,9 +4008,9 @@ if __name__ == '__main__':
 
     # Lambertian projection
     lambertian_proj = False
-    lambertian_smoothed = False
+    lambertian_smoothed = True
 
     # save measured and smoothed data to text files
-    save_to_text = True
+    save_to_text = False
 
     main()
