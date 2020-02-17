@@ -10,6 +10,7 @@ import pandas as pd
 import os
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from matplotlib import cm
 import symfit
 from symfit import exp
@@ -383,7 +384,7 @@ def legendre_poly_param_fit_same_coeffs(sorted_dfs, orders, show_plots):
                             # only even values of m
                             if ((i - idx) % 2 == 0) or (i - idx >= 0):
                                 names.append(name + str(n1) + str(i_n1) + str(n2) + str(i))
-                                order_coeff.append(((i_n1 - idx_n1, n1), (i - idx, n2))) # n, m
+                                order_coeff.append(((i_n1 - idx_n1, n1), (i - idx, n2))) # m, l - m = 0 for legendre polynomials
                             else:
                                 #print( o, i - idx)
                                 continue
@@ -408,11 +409,10 @@ def legendre_poly_param_fit_same_coeffs(sorted_dfs, orders, show_plots):
         for name_a, oc in zip(names_a, order_coeff):
                 a = pars[name_a]
                 legendre += a*lpmv(oc[0][0], oc[0][1], np.sin(phi))*  \
-                            lpmv(oc[1][0], oc[1][1], np.cos(theta))  # lpmv(order, degree, vals), order(n) = oc[0], degree(m) = oc[1]
-                #print( oc, lpmv(oc[0][0], oc[0][1], np.sin(phi)))
+                            lpmv(oc[1][0], oc[1][1], np.cos(theta))  # lpmv(order(m), degree(l), vals), 
+                #print( oc, oc[0][1], oc[0][0], lpmv(oc[0][1], oc[0][0], np.sin(phi)))
         #return (vals - legendre)**2/sigmas**2
         return np.sqrt((vals - legendre)**2/sigmas**2)
-
 
     print('\nFitting parameters b and c with single coefficient legendre polynominals\n')
     a_data, b_data, c_data, d_data = np.load(cwd + '/pickles/lmfit_results.npy', allow_pickle=True)
@@ -429,6 +429,7 @@ def legendre_poly_param_fit_same_coeffs(sorted_dfs, orders, show_plots):
     fit_vals, orig_vals = [], []
     initial_guess = (1e-3, 1e-5)
     title = ('b', 'c')
+    paper_title = ('$a_2$', '$a_3$')
     for index, df in enumerate([df_b, df_c]):
         vals = np.array([float(i) for i in df.val.values])
         sigmas = np.array([float(i) for i in df.stderr.values])
@@ -452,12 +453,35 @@ def legendre_poly_param_fit_same_coeffs(sorted_dfs, orders, show_plots):
                                      lpmv(order_coeff_a[idx][1][0], order_coeff_a[idx][1][1], np.cos(thetas))
 
             if show_plots:
-                fig = plt.figure()
+                fig = plt.figure(figsize=(7, 6.5))
                 ax = fig.add_subplot(111, projection='3d')
+                #ax.grid(False)
+
+                # # make the panes transparent
+                # ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+                # ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+                # ax.zaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+    
                 p = ax.scatter(xs, ys, zs, c=legendre_poly_fit)
-                ax.set_title(title[index] + '\norder = ' + str(order))
-                fig.colorbar(p)
+                ax.view_init(elev=10, azim=15)
+                #ax.set_title(title[index] + '\norder = ' + str(order))
+                ax.set_title(paper_title[index], fontsize=20, pad=-7)
+                ax.set_xlabel('b', fontsize=16, labelpad=-10)
+                ax.set_ylabel('a', fontsize=16, labelpad=-10)
+                ax.set_zlabel('c\'', fontsize=16, labelpad=-10)
+
+                # ax.set_xticks([-1, 0, 1])
+                # ax.set_yticks([-1, 0, 1])
+                # ax.set_zticks([-1, 0, 1])
+                ax.set_xticklabels([])
+                ax.set_yticklabels([])
+                ax.set_zticklabels([])
+
+                axcbar = fig.add_axes([0.85, 0.15, 0.03, 0.7])
+                fig.colorbar(p, cax=axcbar)
+
                 plt.tight_layout()
+                plt.savefig(cwd + '/figures/global_fits/' + title[index] + '.pdf')
 
             print( '\n\n max_fit  min_fit  max_legen  min_legen')
             print( '%8.4f %8.4f %8.4f %10.4f' % (max(vals), min(vals), max(legendre_poly_fit), min(legendre_poly_fit)))
@@ -640,8 +664,8 @@ def compare_legendre_fit_to_orig(sorted_dfs, E_p):
     for index, sorted_df in enumerate(sorted_dfs):
         idx = np.where(np.all(direction == np.array((sorted_df.iloc[0]['x'], sorted_df.iloc[0]['y'], sorted_df.iloc[0]['z'])), axis=1))[0][0]
         plt.plot(xvals, fit(xvals, global_a, legendre_b[idx], legendre_c[idx], global_d), linestyle='--', color=colors[count])
-        #plt.plot(E_p, sorted(sorted_df.param.values), 'o', color=colors[count])
-        plt.plot(xvals, fit(xvals, global_a, orig_bs[idx], orig_cs[idx], global_d), color=colors[count])
+        plt.plot(E_p, sorted(sorted_df.param.values), 'o', color=colors[count], zorder=100)
+        #plt.plot(xvals, fit(xvals, global_a, orig_bs[idx], orig_cs[idx], global_d), color=colors[count])
 
         # print('%8.4f %8.4f %8.2f%% %8.4f %8.4f %8.2f%%' % ( legendre_b[idx], orig_bs[idx], 
         #                                                    (legendre_b[idx] - orig_bs[idx])/(legendre_b[idx] + orig_bs[idx])*200,

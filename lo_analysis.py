@@ -29,6 +29,7 @@ import lmfit
 import pickle
 import dask.array as da
 import sys
+from scipy.special import lpmv 
 sys.path.insert(1, os.getcwd() + '/../stilbene_uncertainties/')
 from coinc_scatter_uncerts_final import calc_ep_uncerts
 
@@ -2952,61 +2953,88 @@ def lsq_sph_biv_spl(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, thet
         mlab.show()
 
 def legendre_poly_fit(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV, plot_pulse_shape, multiplot, save_multiplot):
-    ''' Note: abandoned because it does not reproduce max and min LO well (i.e. the LO rations are underpredicted - > 5% and worse for low energy scatters)'''
-
-    from scipy.special import lpmv 
+    ''' Note: abandoned because it does not reproduce max and min LO well (i.e. the LO rations are underpredicted - > 5% and worse for low energy scatters)
+        2/17/2020 - updated to use same cost functiona s global_fit.py -- works very well now, could have used this to smooth data    
+    '''
 
     def new_cal(lo, m, b, new_m, new_b):
         y = m*np.array(lo) + b
         return (y - new_b)/new_m
 
-    def get_coeff_names(order, central_idx_only):
+    def get_coeff_names(order, name, central_idx_only):
         ''' return list of coefficient names for a given order
             set central_idx_only = True if only using central index terms
             set range in lmfit section to plot desired order of sph harmonics
         '''
         names, order_coeff = [], []
 
+        # updated to central index and even only
         if central_idx_only:
-            for o in range(0, order + 1):
-                names.append('c_' + str(o) + str(o))
-                order_coeff.append((o, o))
-            return names, order_coeff
-        else:
-            for o in range(0, order + 1):
-                coeff_no = 2*o + 1
-                idx = coeff_no - o - 1
-                for i in range(0, coeff_no):
-                    names.append('c_' + str(i) + str(o))
-                    order_coeff.append((o, i - idx)) # n, m
+            for n1 in range(0, order + 1):
+                if n1 % 2 != 0:
+                    continue
+                for n2 in range(0, order + 1):
+                    if n2 % 2 == 0:
+                        names.append(name + str(n1) + str(n2))
+                        order_coeff.append(((0, n1), (0, n2)))
+                    else:
+                        continue
+            print( names)
             return names, order_coeff
 
-    def add_params(names_t, names_p):
+        # associated legendre polynomials, even and positive terms only
+        else:
+            for n1 in range(0, order + 1):
+                if n1 %2 != 0:
+                    continue
+                coeff_no_n1 = 2*n1 + 1
+                idx_n1 = coeff_no_n1 - n1 - 1
+                for i_n1 in range(0, coeff_no_n1):
+                    # only even values of m
+                    if ((i_n1 - idx_n1) % 2 != 0) or (i_n1 - idx_n1 < 0):
+                        continue
+                    for n2 in range(0, order + 1):
+                        if n2 %2 != 0:
+                            continue                    
+                        coeff_no = 2*n2 + 1
+                        idx = coeff_no - n2 - 1
+                        for i in range(0, coeff_no):
+                            # only even values of m
+                            if ((i - idx) % 2 == 0) or (i - idx >= 0):
+                                names.append(name + str(n1) + str(i_n1) + str(n2) + str(i))
+                                order_coeff.append(((i_n1 - idx_n1, n1), (i - idx, n2))) # n, m
+                            else:
+                                #print( o, i - idx)
+                                continue
+            return names, order_coeff
+
+    def add_params(names, ig):
         # create parameter argument for lmfit
         fit_params = lmfit.Parameters()
-        for t, p in zip(names_t, names_p):
-            fit_params.add(t, value=0.5)
-            fit_params.add(p, value=0.5)
+        for t in names:
+            if t in ('b40',):#'c44', 'c42', 'c40'):
+                fit_params.add(t, value=0, vary=False)
+            else:
+                fit_params.add(t, value=ig)
         return fit_params
 
     def minimize(fit_params, *args):
-        ql, ql_uncert, theta, phi, names_t, names_p, order_coeff = args
+        vals, sigmas, theta, phi, names_a, order_coeff = args
 
         pars = fit_params.valuesdict()
-        legendre_t, legendre_p = 0, 0
-        for name_t, name_p, oc in zip(names_t, names_p, order_coeff):
-            ct = pars[name_t]
-            cp = pars[name_p]
-            legendre_t += ct*lpmv(oc[1], oc[0], np.cos(theta))  # oc[0] = n (degree n>=0), oc[1] = m (order |m| <= n)
-            legendre_p += cp*lpmv(oc[1], oc[0], np.sin(phi)) # real value of spherical hamonics
-
-        legendre = legendre_t * legendre_p
-        return (ql - legendre)**2/ql_uncert**2
+        legendre = 0
+        for name_a, oc in zip(names_a, order_coeff):
+                a = pars[name_a]
+                legendre += a*lpmv(oc[0][0], oc[0][1], np.sin(phi))*  \
+                            lpmv(oc[1][0], oc[1][1], np.cos(theta))  # lpmv(order, degree, vals), order(n) = oc[0], degree(m) = oc[1]
+        return np.sqrt((vals - legendre)**2/sigmas**2)
 
     data_bvert = pd_load(fin1, p_dir)
     data_bvert = split_filenames(data_bvert)
     data_cpvert = pd_load(fin2, p_dir)
     data_cpvert = split_filenames(data_cpvert)
+
+    print 'ql_max     ql_min  ratio  fit_max   fit_min   ratio'
 
     for d, det in enumerate(dets):       
         #if d > 0 :
@@ -3042,65 +3070,37 @@ def legendre_poly_fit(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, th
         tilts = tilts[indices]
         x, y, z = xyz_u.T
 
-        ## convert back to spheical coords for sph harmonics fitting
-        theta = np.arccos(z)
-        phi = []
-        for a, b in zip(x, y):
-            #if a < 0 and b >= 0:
-            #    p = np.arctan(b/a) + np.pi
-            #    #print p
-            #elif a < 0 and b < 0:
-            #    p = np.arctan(b/a) - np.pi
-            #elif a == 0 and b > 0:
-            #    p = np.pi/2.
-            #elif a == 0 and b < 0:
-            #    p = -np.pi/2. 
-            if (abs(a) < 1e-5 and abs(b) < 1e-5):
-                print a, b
-                p = 0.
-            else:
-                p = np.arctan(b/a) 
-            phi.append(p)
-        phi = np.array(phi)   
+        ## convert back to spheical coords for fitting
+        theta = np.arccos(z) 
+        phi = np.arctan2(y, x) # arctan2 ensures the correct qudrant of (x, y)
+        # correct rounding errors
+        phi[abs(phi) < 0.00001] = 0.
+        # correct 360 deg symmetry
+        phi[phi < -3.14159] = 3.141593
 
         # lmfit
-        for i in range(2, 3):
+        for i in (6,):
             order = i
             # generate coefficients for phi and theta terms
-            names_t, order_coeff_t = get_coeff_names(order, central_idx_only=True)
-            names_p, order_coeff_p = get_coeff_names(order, central_idx_only=True)
-            fit_params = add_params(names_t, names_p)
+            names_a, order_coeff_a = get_coeff_names(order, name='c', central_idx_only=True)
+            print('number of coefficients = ', len(names_a))
+            fit_params = add_params(names_a, 1e-5)
             #fit_kws={'nan_policy': 'omit'}
-            res = lmfit.minimize(minimize, fit_params, args=(ql, ql_uncert, theta, phi, names_t, names_p, order_coeff_t))
+            res = lmfit.minimize(minimize, fit_params, args=(ql, ql_uncert, theta, phi, names_a, order_coeff_a))
             print '\n', res.message
             print lmfit.fit_report(res, show_correl=False)
 
-            leg_poly_t, leg_poly_p = 0, 0
+            legendre_poly_fit = 0
             for idx, (name, par) in enumerate(res.params.items()):
-                leg_poly_t += par.value*lpmv(order_coeff_t[idx][1], order_coeff_t[idx][0], np.cos(theta))
-                leg_poly_p += par.value*lpmv(order_coeff_t[idx][1], order_coeff_t[idx][0], np.sin(phi))
-                #print leg_poly_t
-            legendre_poly_fit = leg_poly_t * leg_poly_p
-            ql_idx = np.argsort(ql)
-            legendre_poly_sorted = sorted(legendre_poly_fit)
-            for l, ll, q in zip(legendre_poly_fit, sorted(legendre_poly_fit), sorted(ql)):
-                #print l, ll
-                if q == max(sorted(ql)):
-                    print l, q
-                if q == min(sorted(ql)):
-                    print l, q
-                #print l, q
-
-            #for i, (q, l, ll, lll) in enumerate(zip(ql_idx, legendre_poly_fit, legendre_poly_fit[ql_idx], legendre_poly_sorted)):
-            #    if i==0:
-            #        print i, l, ll, lll, q 
-            #        continue
-            #    print i, l, ll, lll, q, q-ql_idx[i-1]
+                legendre_poly_fit += par.value*lpmv(order_coeff_a[idx][0][0], order_coeff_a[idx][0][1], np.sin(phi))*  \
+                                     lpmv(order_coeff_a[idx][1][0], order_coeff_a[idx][1][1], np.cos(theta))
 
             # plot
             fig = mlab.figure(size=(400*2, 350*2)) 
             fig.scene.disable_render = True
-            pts = mlab.points3d(x[ql_idx], y[ql_idx], z[ql_idx], legendre_poly_sorted, colormap='viridis', scale_mode='none', scale_factor=0.03)
+            # pts = mlab.points3d(x[ql_idx], y[ql_idx], z[ql_idx], legendre_poly_sorted, colormap='viridis', scale_mode='none', scale_factor=0.03)
+            pts = mlab.points3d(x, y, z, legendre_poly_fit, colormap='viridis', scale_mode='none', scale_factor=0.03)
+
 
             ## delaunay triagulation (mesh, interpolation)
             tri = mlab.pipeline.delaunay3d(pts)
@@ -3125,82 +3125,9 @@ def legendre_poly_fit(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, th
             mlab.title('Order =' + str(i))
             fig.scene.disable_render = False   
 
+            print '{:^8.3f} {:>8.3f} {:>8.3f} {:>8.3f} {:>8.3f} {:>8.3f} {:>8.3f}'.format(det, max(ql), min(ql), max(ql)/min(ql), max(legendre_poly_fit), min(legendre_poly_fit), max(legendre_poly_fit)/min(legendre_poly_fit)) 
 
-            # TESTS - tried to get the fit to work better, unsuccessful
-            #mesh_theta, mesh_phi = np.mgrid[0.0001:np.pi-0.0001:200j, 0.0001:2*np.pi-0.0001:200j]
-            new_theta = np.linspace(0, np.pi, 500)
-            new_phi = np.linspace(0, 2*np.pi, 500)
-            mesh_theta, mesh_phi = np.meshgrid(new_theta, new_phi)
-            #mesh_x = np.cos(mesh_phi)
-            #mesh_y = np.sin(mesh_phi)*np.sin(mesh_theta)
-            #mesh_z = np.sin(mesh_phi)*np.cos(mesh_theta)
- 
-            mesh_z = np.cos(mesh_theta)
-            mesh_y = np.sin(mesh_theta)*np.sin(mesh_phi)
-            mesh_x = np.sin(mesh_theta)*np.cos(mesh_phi)
-
-            leg_poly_t, leg_poly_p = 0, 0
-            for idx, (name, par) in enumerate(res.params.items()):
-                leg_poly_t += par.value*lpmv(order_coeff_t[idx][1], order_coeff_t[idx][0], np.cos(mesh_theta))
-                leg_poly_p += par.value*lpmv(order_coeff_t[idx][1], order_coeff_t[idx][0], np.sin(mesh_phi))
-            legendre_poly_fit = leg_poly_t * leg_poly_p
-
-            fig = mlab.figure(size=(400*2, 350*2)) 
-            pts = mlab.points3d(x[ql_idx], y[ql_idx], z[ql_idx], legendre_poly_sorted, colormap='viridis', scale_mode='none', scale_factor=0.03)
-
-            # sort legendre output
-            #legendre_poly_fit = np.ravel(legendre_poly_fit)
-            #leg_idx = np.argsort(legendre_poly_fit)
-            #legendre_poly_sorted = np.reshape(sorted(legendre_poly_fit), (15, 15))
-            #mesh_x = np.reshape(np.ravel(mesh_x)[leg_idx], (200, 200))
-            #mesh_y = np.reshape(np.ravel(mesh_y)[leg_idx], (200, 200))
-            #mesh_z = np.reshape(np.ravel(mesh_z)[leg_idx], (200, 200))
-
-            #mesh = mlab.mesh(mesh_x, mesh_y, mesh_z, scalars=legendre_poly_fit, colormap='viridis')
-            #new_x = np.cos(new_phi)
-            #new_y = np.sin(new_phi)*np.sin(new_theta)
-            #new_z = np.sin(new_phi)*np.cos(new_theta)
-
-            new_z = np.cos(new_theta)
-            new_y = np.sin(new_theta)*np.sin(new_phi)
-            new_x = np.sin(new_theta)*np.cos(new_phi)
-
-            new_x = np.ravel(mesh_x)
-            new_y = np.ravel(mesh_y)
-            new_z = np.ravel(mesh_z)
-            new_theta = np.ravel(mesh_theta)
-            new_phi = np.ravel(mesh_phi)
-            legendre_poly_fit = np.ravel(legendre_poly_fit)
-
-            #for mx, my, mz, mtheta, mphi, leg in zip(new_x, new_y, new_z, new_theta, new_phi, legendre_poly_fit):
-            #    #if mz == 1.:
-            #    #print '{:^8.5f} {:>8.5f} {:>8.5f} {:^8.5f} {:>8.5f} {:>8.5f}'.format(mx, my, mz, mtheta, mphi, leg)
-            #    mlab.text3d(mx, my, mz, str(round(mtheta, 3)) + ' ' + str(round(mphi, 3)), scale=0.03, color=(0,0,0), figure=fig)
-            #print min(legendre_poly_fit), max(legendre_poly_fit)
-
-
-            leg_poly_t, leg_poly_p = 0, 0
-            for idx, (name, par) in enumerate(res.params.items()):
-                leg_poly_t += par.value*lpmv(order_coeff_t[idx][1], order_coeff_t[idx][0], np.cos(new_theta))
-                leg_poly_p += par.value*lpmv(order_coeff_t[idx][1], order_coeff_t[idx][0], np.sin(new_phi))
-            legendre_poly_fit = leg_poly_t * leg_poly_p
-
-            #fig = mlab.figure(size=(400*2, 350*2)) 
-            #fig.scene.disable_render = True
-            #pts = mlab.points3d(new_x, new_y, new_z, legendre_poly_fit, colormap='viridis', scale_mode='none', scale_factor=0.03)
-
-            ### delaunay triagulation (mesh, interpolation)
-            #tri = mlab.pipeline.delaunay3d(pts)
-            #edges = mlab.pipeline.extract_edges(tri)
-            ##edges = mlab.pipeline.surface(edges, colormap='viridis')
-
-            #tri_smooth = mlab.pipeline.poly_data_normals(tri) # smooths delaunay triangulation mesh
-            #surf = mlab.pipeline.surface(tri_smooth, colormap='viridis')
-
-            print 'ql_max   ql_min   ratio    fit_max     fit_min     ratio'
-            print max(ql), min(ql), max(ql)/min(ql), max(legendre_poly_fit), min(legendre_poly_fit), max(legendre_poly_fit)/min(legendre_poly_fit) 
-
-        mlab.show()
+        #mlab.show()
 
 def lambertian(fin1, fin2, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV, pulse_shape):
     ''' 2D lambertian projection of the 3D spherical data
@@ -3918,7 +3845,240 @@ def text_file_data(fin, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi
                     np.savetxt(save_file, data, fmt=['%.4f','%.12f','%.12f','%.12f', '%.4f' ])
 
                 print '\ndata saved to', file_path                  
-                    
+
+def check_response_function(det, ep, x, y, z):
+    ''' plot results from global_fit.py and return max and min ql for comparison '''
+
+    def kurz(E_p, a, b, c, d):
+        return a*E_p - b*(1-np.exp(-c*E_p**d))
+
+    def leg_poly(order, coeffs, thetas, phis):
+        legendre_poly = 0
+        for o, c in zip(order, coeffs):
+            #print o, c, lpmv(0, o[0], np.sin(phi)), lpmv(0, o[1], np.cos(theta)) 
+            legendre_poly += c*lpmv(0, o[0], np.sin(phis))*lpmv(0, o[1], np.cos(thetas)) # lpmv(order(m), degree(l), x) - for legendre polynomials m = 0
+        return legendre_poly
+
+    # ignore divide by zero warning
+    np.seterr(divide='ignore', invalid='ignore')
+
+    # values from global_fit.py
+    a = 0.724
+    d = 0.9797
+    orders = ((0, 0), (0, 2), (0, 4), (2, 0), (2, 2), (2, 4))
+    b_coeffs = (2.7666, 0.9391, 0.1138, 0.1053, -0.2224, 0)
+    c_coeffs = (0.2254, -0.0644, 0, -0.0109, 0.0244, -0.0074)
+
+    thetas = np.arccos(z) 
+    phis = np.arctan2(y, x) # arctan2 ensures the correct qudrant of (x, y)
+    # correct rounding errors
+    phis[abs(phis) < 0.00001] = 0.
+    # correct 360 deg symmetry
+    phis[phis < -3.14159] = 3.141593
+
+    # randomly select points on sphere
+    # thetas = np.arccos(2*np.random.rand(100000) - 1)
+    # phis = 2*np.pi*np.random.rand(100000)
+    b_vals = leg_poly(orders, b_coeffs, thetas, phis)
+    c_vals = leg_poly(orders, c_coeffs, thetas, phis)
+
+    # det_angles = [70, 60, 50, 40, 30, 20, 20, 30, 40, 50, 60, 70]
+    # E_n = 11.33
+    # det_energies = [round(E_n*np.sin(np.deg2rad(x))**2, 2) for x in det_angles]
+
+    response = []
+    for b, c in zip(b_vals, c_vals):
+        response.append(kurz(ep, a, b, c, d))
+
+    # plot with lambert projection
+    x = np.sin(thetas)*np.cos(phis)
+    y = np.sin(thetas)*np.sin(phis)
+    z = np.cos(thetas)
+
+    ## convert to lambertian projection (from https://en.wikipedia.org/wiki/Lambert_azimuthal_equal-area_projection)
+    X, Y = [], []
+    for xi, yi, zi in zip(x, y, z):
+        Xi = np.sqrt(2/(1-zi))*xi
+        Yi = np.sqrt(2/(1-zi))*yi
+        if np.isnan(Xi) or np.isnan(Yi):
+            zi -= 0.000001
+            Xi = np.sqrt(2/(1-zi))*xi
+            Yi = np.sqrt(2/(1-zi))*yi    
+        if np.isinf(Xi) or np.isinf(Yi):
+            zi -= 0.000001
+            Xi = np.sqrt(2/(1-zi))*xi
+            Yi = np.sqrt(2/(1-zi))*yi  
+        X.append(Xi)
+        Y.append(Yi)
+    X = np.array(X)/max(X)
+    Y = np.array(Y)/max(Y)
+
+    grid_x, grid_y = np.mgrid[-1:1:1000j, -1:1:1000j]
+    #methods = ('nearest', 'linear', 'cubic')
+    plt.figure()
+    plt.rcParams['axes.facecolor'] = 'grey'
+    f = 16
+    interp = scipy.interpolate.griddata((X, Y), response, (grid_x, grid_y), method='linear')
+    #print max(ql), min(ql), max(ql)/min(ql)
+    plt.imshow(interp.T, extent=(-1,1,-1,1), origin='lower', cmap='viridis', interpolation='none')# , norm=LogNorm(vmin=0.07, vmax=5.36)) Log scale doesn't work 
+    plt.scatter(X, Y, c=response, cmap='viridis')
+    cbar = plt.colorbar(format='%1.2f')
+    cbar.set_label('Light output (MeVee)', rotation=270, labelpad=22, fontsize=20)
+    #print '{:^5d} {:>6.1f} {:>8.3f} {:>8.4f} {:>8.4f} {:>8.4f} {:>8.2f}%'.format(det, theta_n[d], np.mean(ql), avg_uncerts[d], cal_uncerts[d], abs_uncerts[d], avg_uncerts[d]/np.mean(ql)*100)
+    plt.text(-0.71, 0.0, 'a', color='r', fontsize=f)
+    plt.text(0.71, 0., 'a', color='r', fontsize=f)
+    plt.text(0, 0.0, 'c\'', color='r', fontsize=f)
+    plt.text(0, 0.713, 'b', color='r', fontsize=f)
+    plt.text(0, -0.713, 'b', color='r', fontsize=f)
+    plt.title('Proton energy ' + str(round(ep,2)) + ' MeV')
+
+    return max(response), min(response)
+
+def compare_response_lambertian_smooth(fin1, fin2, fin, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, beam_11MeV, pulse_shape, save_plot):
+    ''' 2D lambertian projection of the 3D spherical data
+        Interpolation currently performed with griddata built in methods (linear (current), cubic, nearest)
+    '''
+    def map_smoothed_fitted_data_3d(data, det, tilts, crystal_orientation, theta_neutron, phi_neutron, beam_11MeV):
+        # like map_data_3d but for fitted data
+        det_df = data.loc[(data.det == det)]
+        ql_all, theta_p, phi_p, angles_p = [], [], [], []
+        for t, tilt in enumerate(tilts):
+            
+            tilt_df = det_df.loc[(data.tilt == tilt)]
+            angles = np.arange(0, 180, 5) # 5 and 2 look good
+      
+            ql = sin_func(np.deg2rad(angles), tilt_df['a'].values, tilt_df['b'].values, tilt_df['phi'].values)
+
+            #plt.figure(0)
+            #plt.plot(angles, ql, 'o')
+            
+            thetap, phip = map_3d(tilt, crystal_orientation, angles, theta_neutron, phi_neutron)       
+            ql_all.extend(ql)
+            theta_p.extend(thetap)
+            phi_p.extend(phip)
+            angles_p.extend(angles)
+    
+        d = {'ql': ql_all, 'theta': theta_p, 'phi': phi_p, 'angles': angles_p}
+        df = pd.DataFrame(data=d)
+        return df
+
+    # ignore divide by zero warning
+    np.seterr(divide='ignore', invalid='ignore')
+ 
+    avg_uncerts, avg_qls, abs_uncerts, cal_uncerts = get_avg_lo_uncert(fin[0], fin[1], p_dir, dets, beam_11MeV, pulse_shape) 
+
+    if pulse_shape:
+        f1 = fin1.split('.')
+        fin1 = f1[0] + '_ps.' + f1[1]
+        f2 = fin2.split('.')
+        fin2 = f2[0] + '_ps.' + f2[1]
+
+    data_bvert = pd_load(fin1, p_dir)
+    data_cpvert = pd_load(fin2, p_dir)
+    
+    print ' max_smooth  max_resp  min_smooth  min_res  ratio_smooth  ratio_res'
+    for d, det in enumerate(dets):
+        if d > 5:
+            continue
+        df_b_mapped = map_smoothed_fitted_data_3d(data_bvert, det, bvert_tilt, b_up, theta_n[d], phi_n[d], beam_11MeV)
+        df_cp_mapped = map_smoothed_fitted_data_3d(data_cpvert, det, cpvert_tilt, cp_up, theta_n[d], phi_n[d], beam_11MeV)
+        df_b_mapped_mirror = map_smoothed_fitted_data_3d(data_bvert, det, bvert_tilt, np.asarray(((1,0,0), (0,1,0), (0,0,-1))), theta_n[d], phi_n[d], beam_11MeV)
+        df_cp_mapped_mirror = map_smoothed_fitted_data_3d(data_cpvert, det, cpvert_tilt, np.asarray(((-1,0,0), (0,0,-1), (0,1,0))), theta_n[d], phi_n[d], beam_11MeV)   
+
+        # convert to cartesian
+        theta_b = np.concatenate([df_b_mapped.theta.values, df_b_mapped_mirror.theta.values])
+        theta_cp = np.concatenate([df_cp_mapped.theta.values, df_cp_mapped_mirror.theta.values])
+        phi_b = np.concatenate([df_b_mapped.phi.values, df_b_mapped_mirror.phi.values])
+        phi_cp = np.concatenate([df_cp_mapped.phi.values, df_cp_mapped_mirror.phi.values])
+
+        angles_b = np.concatenate([df_b_mapped.angles.values, df_b_mapped_mirror.angles.values])
+        angles_cp = np.concatenate([df_cp_mapped.angles.values, df_cp_mapped_mirror.angles.values])
+        angles = np.concatenate((angles_b, angles_cp))
+
+        x_b, y_b, z_b = polar_to_cartesian(theta_b, phi_b, b_up, cp_up)
+        x_cp, y_cp, z_cp = polar_to_cartesian(theta_cp, phi_cp, cp_up, cp_up)
+
+        x = np.round(np.concatenate((x_b, x_cp)), 12)
+        y = np.round(np.concatenate((y_b, y_cp)), 12)
+        z = np.round(np.concatenate((z_b, z_cp)), 12)
+        ql = np.concatenate([df_b_mapped.ql.values, df_b_mapped_mirror.ql.values, df_cp_mapped.ql.values, df_cp_mapped_mirror.ql.values])
+      
+        ## remove repeated points
+        xyz = np.array(zip(x, y, z))
+        xyz_u, indices = np.unique(xyz, axis=0, return_index=True)
+        ql = ql[indices]
+        x, y, z = xyz_u.T
+
+        # convert to lambertian projection (from https://en.wikipedia.org/wiki/Lambert_azimuthal_equal-area_projection)
+        X, Y = [], []
+        for xi, yi, zi in zip(x, y, z):
+            Xi = np.sqrt(2/(1-zi))*xi
+            Yi = np.sqrt(2/(1-zi))*yi
+            if np.isnan(Xi) or np.isnan(Yi):
+                zi -= 0.000001
+                Xi = np.sqrt(2/(1-zi))*xi
+                Yi = np.sqrt(2/(1-zi))*yi    
+            if np.isinf(Xi) or np.isinf(Yi):
+                zi -= 0.000001
+                Xi = np.sqrt(2/(1-zi))*xi
+                Yi = np.sqrt(2/(1-zi))*yi  
+            X.append(Xi)
+            Y.append(Yi)
+        X = np.array(X)/max(X)
+        Y = np.array(Y)/max(Y)
+
+        #print np.mean(ql_uncert), np.std(ql_uncert)
+        grid_x, grid_y = np.mgrid[-1:1:1000j, -1:1:1000j]
+        #methods = ('nearest', 'linear', 'cubic')
+        methods = ('linear',)
+        plt.rcParams['axes.facecolor'] = 'grey'
+        f = 16
+        for method in methods:
+            interp = scipy.interpolate.griddata((X, Y), ql, (grid_x, grid_y), method=method)
+            #print max(ql), min(ql), max(ql)/min(ql)
+            plt.figure()
+            plt.imshow(interp.T, extent=(-1,1,-1,1), origin='lower', cmap='viridis', interpolation='none')# , norm=LogNorm(vmin=0.07, vmax=5.36)) Log scale doesn't work 
+            if not save_plot:
+                plt.scatter(X, Y, c=ql, cmap='viridis')
+            # put avg uncert on colorbar
+            ## need to scale y from (0, 1) to (min(ql), max(ql))
+            avg_uncert = avg_uncerts[d]/(max(ql) - min(ql))
+            abs_uncert = abs_uncerts[d]/(max(ql) - min(ql))
+            cal_uncert = cal_uncerts[d]/(max(ql) - min(ql))
+
+            if pulse_shape:
+                cbar = plt.colorbar(format='%1.3f')
+                cbar.set_label('Pulse shape parameter', rotation=270, labelpad=22, fontsize=20)
+            else:
+                cbar = plt.colorbar(format='%1.2f')
+                cbar.set_label('Light output (MeVee)', rotation=270, labelpad=22, fontsize=20)
+
+            cbar.ax.errorbar(0.5, 0.5, yerr=avg_uncert, ecolor='w', elinewidth=2, capsize=4, capthick=2)
+            cbar.ax.errorbar(0.5, 0.5, yerr=cal_uncert, ecolor='k', elinewidth=2, capsize=4, capthick=2, zorder=100)
+            cbar.ax.tick_params(labelsize=14)
+
+            plt.text(-0.71, 0.0, 'a', color='r', fontsize=f)
+            plt.text(0.71, 0., 'a', color='r', fontsize=f)
+            plt.text(0, 0.0, 'c\'', color='r', fontsize=f)
+            plt.text(0, 0.713, 'b', color='r', fontsize=f)
+            plt.text(0, -0.713, 'b', color='r', fontsize=f)
+            if beam_11MeV:
+                en = 11.33
+                plt.title(str(round(en*np.sin(np.deg2rad(theta_n[d]))**2, 2)) + ' MeV recoil protons, low gain', fontsize=20)
+                #plt.title(str(round(en*np.sin(np.deg2rad(theta_n[d]))**2, 2)) + ' MeV recoil protons', fontsize=20)
+            else:
+                en = 4.83
+                plt.title(str(round(en*np.sin(np.deg2rad(theta_n[d]))**2, 2)) + ' MeV recoil protons, high gain', fontsize=20)
+                #plt.title(str(round(en*np.sin(np.deg2rad(theta_n[d]))**2, 2)) + ' MeV recoil protons', fontsize=20)
+
+            plt.xticks([])
+            plt.yticks([])
+            plt.tight_layout()
+
+            max_res, min_res = check_response_function(det, en*np.sin(np.deg2rad(theta_n[d]))**2, x, y, z)
+            print'{:>10.3f} {:>10.3f} {:>10.3f} {:>10.3f} {:>10.3f} {:>10.3f}'.format(max(ql), max_res, min(ql), min_res, max(ql)/min(ql), max_res/min_res)
+    plt.show()
+
 def main():
     cwd = os.getcwd()
     p_dir = cwd + '/pickles/'
@@ -4040,7 +4200,12 @@ def main():
                           beam_11MeV=True, pulse_shape=False, save_plot=False)
         lambertian_smooth(sin_fits[2], sin_fits[3], (fin[2], fin[3]), dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, 
                           beam_11MeV=False, pulse_shape=False, save_plot=False)
-    
+
+    if compare_response_lambertian_smoothed:
+        compare_response_lambertian_smooth(sin_fits[0], sin_fits[1], (fin[0], fin[1]), dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, 
+                          beam_11MeV=True, pulse_shape=False, save_plot=False)
+        compare_response_lambertian_smooth(sin_fits[2], sin_fits[3], (fin[2], fin[3]), dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, 
+                          beam_11MeV=False, pulse_shape=False, save_plot=False)
     if save_to_text:
         text_file_data(fin, dets, bvert_tilt, cpvert_tilt, b_up, cp_up, theta_n, phi_n, p_dir, cwd, 
                        pulse_shape=False, measured=True, smoothed=True, map_mirror=False)
@@ -4085,8 +4250,8 @@ if __name__ == '__main__':
     avg_heatmap_4 = False
 
     # plot smoothed measured data
-    smoothed_fitted_heatmap_11 = True
-    smoothed_fitted_heatmap_4 =  True
+    smoothed_fitted_heatmap_11 = False
+    smoothed_fitted_heatmap_4 =  False
 
     # polar plots
     polar_plots = False
@@ -4105,9 +4270,11 @@ if __name__ == '__main__':
 
     # Lambertian projection
     lambertian_proj = False
-    lambertian_smoothed = True
+    lambertian_smoothed = False
 
     # save measured and smoothed data to text files
     save_to_text = False
 
+    # compare the results of global_fit.py with the smoothed light output data
+    compare_response_lambertian_smoothed = True
     main()
