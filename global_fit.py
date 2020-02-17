@@ -360,7 +360,6 @@ def legendre_poly_param_fit_same_coeffs(sorted_dfs, orders, show_plots):
                         order_coeff.append(((0, n1), (0, n2)))
                     else:
                         continue
-            print( names)
             return names, order_coeff
 
         # associated legendre polynomials, even and positive terms only
@@ -466,7 +465,8 @@ def legendre_poly_param_fit_same_coeffs(sorted_dfs, orders, show_plots):
         fit_vals.append(legendre_poly_fit)
         orig_vals.append(vals)
 
-    return float(df_a.val[0]), fit_vals[0], fit_vals[1], float(df_d.val[0]), orig_vals[0], orig_vals[1], xs, ys, zs
+    return float(df_a.val[0]), float(df_a.stderr[0]), fit_vals[0], fit_vals[1], float(df_d.val[0]), float(df_d.stderr[0]), \
+           orig_vals[0], orig_vals[1], xs, ys, zs
 
 def legendre_poly_param_fit_diff_coeffs(sorted_dfs, orders, show_plots):
 
@@ -605,9 +605,8 @@ def compare_legendre_fit_to_orig(sorted_dfs, E_p):
     # global_a, legendre_b, legendre_c, global_d, orig_bs, orig_cs, xs, ys, zs = legendre_poly_param_fit_diff_coeffs(sorted_dfs, 
     #                                                                                                                 order, 
     #                                                                                                                 show_plots=True)
-    global_a, legendre_b, legendre_c, global_d, orig_bs, orig_cs, xs, ys, zs = legendre_poly_param_fit_same_coeffs(sorted_dfs, 
-                                                                                                                   order, 
-                                                                                                                   show_plots=True)
+    global_a, global_a_unc, legendre_b, legendre_c, global_d, global_d_unc, orig_bs, orig_cs, xs, ys, zs \
+        = legendre_poly_param_fit_same_coeffs(sorted_dfs, order, show_plots=True)
     direction = np.array([xs, ys, zs]).T
     # only keep positive x, y, z coords (remove identical lo curves)
     dirs, checked_dirs = [], []
@@ -661,6 +660,7 @@ def compare_legendre_fit_to_orig(sorted_dfs, E_p):
 
     print('\n mean(abs(rel_b))   mean(abs(rel_c))  max(rel_b)  max(rel_c)')
     print('%12.4f%% %18.4f%% %11.4f%% %11.4f%%\n' % (np.mean(rel_b), np.mean(rel_c), max(rel_b), max(rel_c)))
+    print('\na = %.4f' % global_a, 'a_unc = %.4f' % global_a_unc, '\nd = %.4f' % global_d, 'd_unc = %.4f' % global_d_unc, '\n')
 
 def legendre_poly_param_fit_diff_coeffs_test(sorted_dfs, orders, show_plots):
 
