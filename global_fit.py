@@ -341,7 +341,7 @@ def sph_harm_fit(sorted_dfs):
         print( '\n\n max_fit  min_fit  max_legen  min_legen')
         print( '%8.4f %8.4f %8.4f %10.4f' % (max(vals), min(vals), max(y_lm), min(y_lm)))
 
-def legendre_poly_param_fit_same_coeffs(sorted_dfs, orders, show_plots):
+def legendre_poly_param_fit_same_coeffs(sorted_dfs, orders, show_plots, save_fig):
 
     def get_coeff_names(order, name, central_idx_only):
         ''' return list of coefficient names for a given order
@@ -480,7 +480,8 @@ def legendre_poly_param_fit_same_coeffs(sorted_dfs, orders, show_plots):
                 fig.colorbar(p, cax=axcbar)
 
                 plt.tight_layout()
-                plt.savefig(cwd + '/figures/global_fits/' + title[index] + '.pdf')
+                if save_fig:
+                    plt.savefig(cwd + '/figures/global_fits/' + title[index] + '.pdf')
 
             print( '\n\n max_fit  min_fit  max_legen  min_legen')
             print( '%8.4f %8.4f %8.4f %10.4f' % (max(vals), min(vals), max(legendre_poly_fit), min(legendre_poly_fit)))
@@ -630,24 +631,25 @@ def compare_legendre_fit_to_orig(sorted_dfs, E_p):
     #                                                                                                                 order, 
     #                                                                                                                 show_plots=True)
     global_a, global_a_unc, legendre_b, legendre_c, global_d, global_d_unc, orig_bs, orig_cs, xs, ys, zs \
-        = legendre_poly_param_fit_same_coeffs(sorted_dfs, order, show_plots=True)
+        = legendre_poly_param_fit_same_coeffs(sorted_dfs, order, show_plots=True, save_fig=False)
+    #print( legendre_b)
     direction = np.array([xs, ys, zs]).T
     # only keep positive x, y, z coords (remove identical lo curves)
-    dirs, checked_dirs = [], []
-    for idx, d in enumerate(direction):
-        checked_dirs.append(list(d))
-        if list(-d) in checked_dirs:
-            #print( d)
-            continue
-        #print( -d, direction[np.where(np.all(direction == -d, axis=1))])
-        dirs.append(direction[np.where(np.all(direction == -d, axis=1))][0])
-        #incices.append(idx)
+    # dirs, checked_dirs = [], []
+    # for idx, d in enumerate(direction):
+    #     checked_dirs.append(list(d))
+    #     if list(-d) in checked_dirs:
+    #         #print( d)
+    #         continue
+    #     #print( -d, direction[np.where(np.all(direction == -d, axis=1))])
+    #     dirs.append(direction[np.where(np.all(direction == -d, axis=1))][0])
+    #     #incices.append(idx)
 
-    neg_dirs = [list(-x) for x in dirs]
-    dirs.extend(neg_dirs)
+    # neg_dirs = [list(-x) for x in dirs]
+    # dirs.extend(neg_dirs)
 
-    direction = np.array(dirs)
-    xvals = np.linspace(0, 10, 1000)
+    # direction = np.array(dirs)
+    xvals = np.linspace(0, 10.1, 1000)
     plt.figure()
     count = 0
     #print('\n legen_b   orig_b   rel_diff  legen_c  orig_c   rel_diff')
@@ -659,7 +661,7 @@ def compare_legendre_fit_to_orig(sorted_dfs, E_p):
 
     colors = cm.viridis(np.linspace(-1, 1, len(sorted_dfs)))
     #print(colors)
-    rel_b, rel_c = [], []
+    rel_b, rel_c, response = [], [], []
     for index, sorted_df in enumerate(sorted_dfs):
         idx = np.where(np.all(direction == np.array((sorted_df.iloc[0]['x'], sorted_df.iloc[0]['y'], sorted_df.iloc[0]['z'])), axis=1))[0][0]
         plt.plot(xvals, fit(xvals, global_a, legendre_b[idx], legendre_c[idx], global_d), linestyle='--', color=colors[count])
@@ -678,13 +680,18 @@ def compare_legendre_fit_to_orig(sorted_dfs, E_p):
         #     count = 0
         #     plt.show()
 
+        # 10 MeV response
+        response.append(fit(10, global_a, legendre_b[idx], legendre_c[idx], global_d))
+
     plt.xlabel('Recoil proton energy (MeV)', fontsize=16)
     plt.ylabel('Light output (MeVee)', fontsize=16)
     plt.tight_layout()
 
     print('\n mean(abs(rel_b))   mean(abs(rel_c))  max(rel_b)  max(rel_c)')
     print('%12.4f%% %18.4f%% %11.4f%% %11.4f%%\n' % (np.mean(rel_b), np.mean(rel_c), max(rel_b), max(rel_c)))
-    print('\na = %.4f' % global_a, 'a_unc = %.4f' % global_a_unc, '\nd = %.4f' % global_d, 'd_unc = %.4f' % global_d_unc, '\n')
+    print('\na = %.8f' % global_a, 'a_unc = %.4f' % global_a_unc, '\nd = %.8f' % global_d, 'd_unc = %.4f' % global_d_unc, '\n')
+    print('  max_response  min_response 10 MeV')
+    print('%12.4f' % max(response), '%12.4f' % min(response))
 
 def legendre_poly_param_fit_diff_coeffs_test(sorted_dfs, orders, show_plots):
 
@@ -853,7 +860,7 @@ def main():
     #lmfit_global_fit(sorted_dfs, E_p, save_results=False) 
 
     order = range(2, 12)
-    #legendre_poly_param_fit_same_coeffs(sorted_dfs, order, show_plots=True) # low uncerts, poor comparison to lmfit global fits
+    #legendre_poly_param_fit_same_coeffs(sorted_dfs, order, show_plots=True, save_fig=False) # low uncerts, poor comparison to lmfit global fits
     #legendre_poly_param_fit_diff_coeffs(sorted_dfs, order, show_plots=False) # high uncerts, good comparison to lmfit global fits
     #sph_harm_fit(sorted_dfs) # does not accurately fit the data
 

@@ -3859,15 +3859,34 @@ def check_response_function(det, ep, x, y, z):
             legendre_poly += c*lpmv(0, o[0], np.sin(phis))*lpmv(0, o[1], np.cos(thetas)) # lpmv(order(m), degree(l), x) - for legendre polynomials m = 0
         return legendre_poly
 
+    def plot_3d_scatter(x, y, z, vals):
+        fig = plt.figure(figsize=(7, 6.5))
+        ax = fig.add_subplot(111, projection='3d')
+        p = ax.scatter(x, y, z, c=vals, cmap='viridis')
+        ax.view_init(elev=10, azim=15)
+        ax.set_title('c', fontsize=20)
+        ax.set_xlabel('b', fontsize=16, labelpad=-10)
+        ax.set_ylabel('a', fontsize=16, labelpad=-10)
+        ax.set_zlabel('c\'', fontsize=16, labelpad=-10)
+        ax.set_xticklabels([])
+        ax.set_yticklabels([])
+        ax.set_zticklabels([])
+        axcbar = fig.add_axes([0.85, 0.15, 0.03, 0.7])
+        fig.colorbar(p, cax=axcbar)
+
     # ignore divide by zero warning
     np.seterr(divide='ignore', invalid='ignore')
 
     # values from global_fit.py
-    a = 0.724
+    #a = 0.724
+    a = 0.7420
+    # d = 0.9797
     d = 0.9797
     orders = ((0, 0), (0, 2), (0, 4), (2, 0), (2, 2), (2, 4))
     b_coeffs = (2.7666, 0.9391, 0.1138, 0.1053, -0.2224, 0)
     c_coeffs = (0.2254, -0.0644, 0, -0.0109, 0.0244, -0.0074)
+    # b_coeffs = ( 2.76658432, 0.93910019, 0.11381561, 0.10531335, -0.22237706)
+    # c_coeffs = (0.22542851, -0.06436005, 0, -0.01085051, 0.02438469, -0.00736863)
 
     thetas = np.arccos(z) 
     phis = np.arctan2(y, x) # arctan2 ensures the correct qudrant of (x, y)
@@ -3879,8 +3898,10 @@ def check_response_function(det, ep, x, y, z):
     # randomly select points on sphere
     # thetas = np.arccos(2*np.random.rand(100000) - 1)
     # phis = 2*np.pi*np.random.rand(100000)
+
     b_vals = leg_poly(orders, b_coeffs, thetas, phis)
     c_vals = leg_poly(orders, c_coeffs, thetas, phis)
+    #print b_vals
 
     # det_angles = [70, 60, 50, 40, 30, 20, 20, 30, 40, 50, 60, 70]
     # E_n = 11.33
@@ -3891,9 +3912,14 @@ def check_response_function(det, ep, x, y, z):
         response.append(kurz(ep, a, b, c, d))
 
     # plot with lambert projection
-    x = np.sin(thetas)*np.cos(phis)
-    y = np.sin(thetas)*np.sin(phis)
-    z = np.cos(thetas)
+
+    # check b and c values
+    #print '\n\nmax_b   min_b   max_c   min_c  max_resp   min_resp'
+    #print '{:^8.4f} {:>8.4f} {:>8.4f} {:>8.4f} {:>8.4f} {:>8.4f}'.format(max(b_vals), min(b_vals), max(c_vals), min(c_vals), max(response), min(response))
+    # plot_3d_scatter(x, y, z, b_vals)
+    # plot_3d_scatter(x. y, z, c_vals)
+    #plot_3d_scatter(x, y, z, response)
+    #plt.show()
 
     ## convert to lambertian projection (from https://en.wikipedia.org/wiki/Lambert_azimuthal_equal-area_projection)
     X, Y = [], []

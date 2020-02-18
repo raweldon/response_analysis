@@ -2,7 +2,7 @@
     "git.ignoreLimitWarning": true,
     "git.enabled": true,
     "workbench.panel.defaultLocation": "right",
-    "python.pythonPath": "C:\\Users\\raweldon\\AppData\\Local\\Continuum\\anaconda2\\envs\\py27_mayavi\\python.exe",
+    "python.pythonPath": "C:\\Users\\bubbaw1293\\Anaconda3\\envs\\py37\\python.exe",
     "python.autoComplete.extraPaths": [
         "C:\\Users\\raweldon\\AppData\\Local\\Continuum\\Anaconda2\\lib\\site-packages\\pandas"
     ],
