@@ -17,6 +17,7 @@ from symfit import exp
 import time
 import random
 from scipy.special import lpmv
+import pickle
 
 start_time = time.time()
 cwd = os.getcwd()
@@ -173,10 +174,10 @@ def lmfit_global_fit(sorted_dfs, E_p, save_results):
         # now flatten this to a 1D array, as minimize() needs
         return resid.flatten()
 
-    dfs = sorted_dfs
-    sorted_dfs = []
-    for i in range(100):
-        sorted_dfs.append(random.choice(dfs))
+    # dfs = sorted_dfs
+    # sorted_dfs = []
+    # for i in range(100):
+    #     sorted_dfs.append(random.choice(dfs))
 
     print('\nPerforming global fit on %i directions with lmfit\n' % len(sorted_dfs))
     x_data = np.array(E_p)
@@ -191,14 +192,15 @@ def lmfit_global_fit(sorted_dfs, E_p, save_results):
     fit_params = lmfit.Parameters()
     for idx in range(len(sorted_dfs)):
         fit_params.add('a_%i' % (idx), value=0.76, min=0, max=1)
-        fit_params.add('b_%i' % (idx), value=2.8, min=0, max=10)
+        fit_params.add('b_%i' % (idx), value=2.8, min=0, max=5)
         fit_params.add('c_%i' % (idx), value=0.25, min=0, max=1)
-        fit_params.add('d_%i' % (idx), value=0.98, min=0.9, max=1.5)
+        fit_params.add('d_%i' % (idx), value=0.98, min=0.9, max=1.0)
 
-    # constrain values of a and d to be the same for all fits
+    # constrain values of a and d to be the same for all fits (shared c for testing on 2/18/2020)
     for idx in range(1, len(sorted_dfs)):
         fit_params['a_%i' % idx].expr = 'a_0'
         fit_params['d_%i' % idx].expr = 'd_0'
+        #fit_params['c_%i' % idx].expr = 'c_0'
 
     res = lmfit.minimize(objective, fit_params, args=(x_data, y_data))
     #lmfit.report_fit(res.params, show_correl=False)
@@ -394,7 +396,7 @@ def legendre_poly_param_fit_same_coeffs(sorted_dfs, orders, show_plots, save_fig
         # create parameter argument for lmfit
         fit_params = lmfit.Parameters()
         for t in names:
-            if t in ('b44', 'b42', 'b40', 'b24', 'c44', 'c42', 'c40', 'c04'):
+            if t in ('w',):#'b44', 'b42', 'b40', 'b24', 'c44', 'c42', 'c40', 'c04'):
                 fit_params.add(t, value=0, vary=False)
             else:
                 fit_params.add(t, value=ig)
@@ -414,7 +416,7 @@ def legendre_poly_param_fit_same_coeffs(sorted_dfs, orders, show_plots, save_fig
         return np.sqrt((vals - legendre)**2/sigmas**2)
 
     print('\nFitting parameters b and c with single coefficient legendre polynominals\n')
-    a_data, b_data, c_data, d_data = np.load(cwd + '/pickles/lmfit_results.npy', allow_pickle=True)
+    a_data, b_data, c_data, d_data = np.load(cwd + '/pickles/lmfit_results_c_shared.npy', allow_pickle=True)
     df_a = pd.DataFrame(a_data, columns=['params', 'val', 'stderr', 'x', 'y', 'z'])
     df_b = pd.DataFrame(b_data, columns=['params', 'val', 'stderr', 'x', 'y', 'z'])
     df_c = pd.DataFrame(c_data, columns=['params', 'val', 'stderr', 'x', 'y', 'z'])
@@ -430,6 +432,7 @@ def legendre_poly_param_fit_same_coeffs(sorted_dfs, orders, show_plots, save_fig
     title = ('b', 'c')
     paper_title = ('$a_2$', '$a_3$')
     for index, df in enumerate([df_b, df_c]):
+    #for index, df in enumerate([df_b,]):
         vals = np.array([float(i) for i in df.val.values])
         sigmas = np.array([float(i) for i in df.stderr.values])
 
@@ -446,10 +449,18 @@ def legendre_poly_param_fit_same_coeffs(sorted_dfs, orders, show_plots, save_fig
             print( '\n', res.message)
             print( lmfit.fit_report(res, show_correl=False))
 
+            coefficients, degrees = [], []
             legendre_poly_fit = 0
             for idx, (name, par) in enumerate(res.params.items()):
                 legendre_poly_fit += par.value*lpmv(order_coeff_a[idx][0][0], order_coeff_a[idx][0][1], np.sin(phis))*  \
                                      lpmv(order_coeff_a[idx][1][0], order_coeff_a[idx][1][1], np.cos(thetas))
+                coefficients.append(par.value)
+                degrees.append((order_coeff_a[idx][0][1], order_coeff_a[idx][1][1]))
+
+            # save to pickle to pass to lo_analysis
+            out = open( cwd + '/pickles/' + title[index] + '_coeffs_' + str(i) + 'th_degree.p', "wb" )
+            pickle.dump( (coefficients, degrees), out, protocol=2)
+            out.close()
 
             if show_plots:
                 fig = plt.figure(figsize=(7, 6.5))
@@ -492,6 +503,10 @@ def legendre_poly_param_fit_same_coeffs(sorted_dfs, orders, show_plots, save_fig
 
     return float(df_a.val[0]), float(df_a.stderr[0]), fit_vals[0], fit_vals[1], float(df_d.val[0]), float(df_d.stderr[0]), \
            orig_vals[0], orig_vals[1], xs, ys, zs
+
+    # c shared
+    # return float(df_a.val[0]), float(df_a.stderr[0]), legendre_poly_fit, [float(i) for i in df_c.val.values], float(df_d.val[0]), \
+    #        float(df_d.stderr[0]), vals, [float(i) for i in df_c.val.values], xs, ys, zs
 
 def legendre_poly_param_fit_diff_coeffs(sorted_dfs, orders, show_plots):
 
@@ -626,7 +641,7 @@ def compare_legendre_fit_to_orig(sorted_dfs, E_p):
             the light output curve estimated by the legendre polynomial fit
     '''
 
-    order = (4,) # order=11 provides smallest error with global fit results
+    order = (8,) # order=11 provides smallest error with global fit results
     # global_a, legendre_b, legendre_c, global_d, orig_bs, orig_cs, xs, ys, zs = legendre_poly_param_fit_diff_coeffs(sorted_dfs, 
     #                                                                                                                 order, 
     #                                                                                                                 show_plots=True)

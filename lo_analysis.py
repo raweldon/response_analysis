@@ -27,6 +27,7 @@ import pylab as plt
 import scipy
 import lmfit
 import pickle
+import cPickle
 import dask.array as da
 import sys
 from scipy.special import lpmv 
@@ -3852,11 +3853,11 @@ def check_response_function(det, ep, x, y, z):
     def kurz(E_p, a, b, c, d):
         return a*E_p - b*(1-np.exp(-c*E_p**d))
 
-    def leg_poly(order, coeffs, thetas, phis):
+    def leg_poly(degree, coeffs, thetas, phis):
         legendre_poly = 0
-        for o, c in zip(order, coeffs):
+        for d, c in zip(degree, coeffs):
             #print o, c, lpmv(0, o[0], np.sin(phi)), lpmv(0, o[1], np.cos(theta)) 
-            legendre_poly += c*lpmv(0, o[0], np.sin(phis))*lpmv(0, o[1], np.cos(thetas)) # lpmv(order(m), degree(l), x) - for legendre polynomials m = 0
+            legendre_poly += c*lpmv(0, d[0], np.sin(phis))*lpmv(0, d[1], np.cos(thetas)) # lpmv(order(m), degree(l), x) - for legendre polynomials m = 0
         return legendre_poly
 
     def plot_3d_scatter(x, y, z, vals):
@@ -3876,17 +3877,30 @@ def check_response_function(det, ep, x, y, z):
 
     # ignore divide by zero warning
     np.seterr(divide='ignore', invalid='ignore')
+    cwd = os.getcwd()
 
     # values from global_fit.py
     #a = 0.724
     a = 0.7420
     # d = 0.9797
     d = 0.9797
-    orders = ((0, 0), (0, 2), (0, 4), (2, 0), (2, 2), (2, 4))
-    b_coeffs = (2.7666, 0.9391, 0.1138, 0.1053, -0.2224, 0)
-    c_coeffs = (0.2254, -0.0644, 0, -0.0109, 0.0244, -0.0074)
-    # b_coeffs = ( 2.76658432, 0.93910019, 0.11381561, 0.10531335, -0.22237706)
-    # c_coeffs = (0.22542851, -0.06436005, 0, -0.01085051, 0.02438469, -0.00736863)
+    # 4th degree short
+    #degrees = ((0, 0), (0, 2), (0, 4), (2, 0), (2, 2), (2, 4))
+    #b_coeffs = (2.7666, 0.9391, 0.1138, 0.1053, -0.2224, 0)
+    #c_coeffs = (0.2254, -0.0644, 0, -0.0109, 0.0244, -0.0074)
+    # 6th degree
+    degrees = ((0, 0), (0, 2), (0, 4), (0, 6), (2, 0), (2, 2), (2, 4), (2, 6), 
+              (4, 0), (4, 2), (4, 4), (4, 6), (6, 0), (6, 2), (6, 4), (6, 6))
+    b_coeffs=( 2.76697644, 0.94718087, 0.13037386, 0.02361264, 0.09625234, -0.24914685, -0.02096325, -0.01518731, 0.03059026,
+               0.02774861, -0.07173043, -0.10408501, -0.01211527, 0.00418594, 0.07343101, 0.02780216)
+    c_coeffs = ( 0.22539511,-0.06454354, 0.00105886, -9.7618e-04, -0.01003928, 0.02574012, -0.00832493, 4.8373e-04, -0.00276053,
+                -0.00303015, 0.00610557, 0.00487771, 0.00160470, 2.6961e-04, -0.00510927, -1.1160e-04)
+
+    # load coefficient data from pickle; Note: 8th degree gives best ratios
+    with open(cwd + '/pickles/' + 'b_coeffs_8th_degree.p', 'rb') as f:
+        b_coeffs, degrees = pickle.load(f)
+    with open(cwd + '/pickles/' + 'c_coeffs_8th_degree.p', 'rb') as f:
+        c_coeffs, degrees = pickle.load(f)        
 
     thetas = np.arccos(z) 
     phis = np.arctan2(y, x) # arctan2 ensures the correct qudrant of (x, y)
@@ -3899,8 +3913,8 @@ def check_response_function(det, ep, x, y, z):
     # thetas = np.arccos(2*np.random.rand(100000) - 1)
     # phis = 2*np.pi*np.random.rand(100000)
 
-    b_vals = leg_poly(orders, b_coeffs, thetas, phis)
-    c_vals = leg_poly(orders, c_coeffs, thetas, phis)
+    b_vals = leg_poly(degrees, b_coeffs, thetas, phis)
+    c_vals = leg_poly(degrees, c_coeffs, thetas, phis)
     #print b_vals
 
     # det_angles = [70, 60, 50, 40, 30, 20, 20, 30, 40, 50, 60, 70]
