@@ -1730,7 +1730,7 @@ def plot_ratios(fin, dets, cwd, p_dir, pulse_shape, uncalibrated, bl_only, save_
                     if pulse_shape:
                         a_ql_val = a_axis_df.ql_vals.iloc[np.where(a_axis_df.det == det)].values
                         cp_b_ql_val = cp_b_axes_df.ql_vals.iloc[np.where(cp_b_axes_df.det == det)].values
-                        a_uncert_cal = np.sqrt((cal_unc[d]/a_ql_val*a_ql)**2 + ps_unc[d]**2 + (0.005*a_ql[d])**2 
+                        a_uncert_cal = np.sqrt((cal_unc[d]/a_ql_val*a_ql)**2 + ps_unc[d]**2 + (0.005*a_ql)**2 
                                                 + (drift_unc*a_ql)**2) # note: a_ql is psp, a_ql_val is a-axis LO (used to get % uncerts)
                         cp_b_uncert_cal = np.sqrt((cal_unc[d]/cp_b_ql_val*cp_b_ql)**2 + ps_unc[d]**2 + (0.005*cp_b_ql)**2 + (drift_unc*cp_b_ql)**2)
                     else:
@@ -1743,6 +1743,8 @@ def plot_ratios(fin, dets, cwd, p_dir, pulse_shape, uncalibrated, bl_only, save_
                         a_ql_uncal = remove_cal(a_ql, c, b)
                         cp_b_ql_uncal = remove_cal(cp_b_ql, c, b)
                         rat = a_ql_uncal/cp_b_ql_uncal
+
+                    print det, rat
                     ratio.append(rat)
                     uncert.append(unc)
                     shape = '^'
@@ -1771,9 +1773,7 @@ def plot_ratios(fin, dets, cwd, p_dir, pulse_shape, uncalibrated, bl_only, save_
 
             # plot smoothed ratios
             smoothed_ratio = get_smoothed_data(sin_fits[i], dets, c, b, uncalibrated=uncalibrated, pulse_shape=pulse_shape)
-            p_idx = np.argsort(p_erg)
-            smoothed_ratio = smoothed_ratio[p_idx]
-            plt.errorbar(p_erg, smoothed_ratio, yerr=uncert, ecolor='g', markerfacecolor='None', fmt='s', 
+            plt.errorbar(sorted(p_erg), smoothed_ratio[::-1], yerr=uncert, ecolor='g', markerfacecolor='None', fmt='s', 
                          markeredgecolor='g', markeredgewidth=1, markersize=ms, capsize=2, label=label_smooth[i])
 
             xmin, xmax = plt.xlim(0, 14.5)
@@ -1798,11 +1798,7 @@ def plot_ratios(fin, dets, cwd, p_dir, pulse_shape, uncalibrated, bl_only, save_
 
             # plot smoothed ratios
             smoothed_ratio = get_smoothed_data(sin_fits[i], dets, c, b, uncalibrated=uncalibrated, pulse_shape=pulse_shape)
-            p_idx = np.argsort(p_erg)
-            print p_idx
-            smoothed_ratio = smoothed_ratio[p_idx]
-            print p_erg, '\n', dets, '\n', smoothed_ratio
-            plt.errorbar(p_erg, smoothed_ratio, yerr=uncert, ecolor='g', markerfacecolor='None', fmt='s', 
+            plt.errorbar(sorted(p_erg), smoothed_ratio[::-1], yerr=uncert, ecolor='g', markerfacecolor='None', fmt='s', 
                          markeredgecolor='g', markeredgewidth=1, markersize=ms, capsize=2, label=label_smooth[i])
 
             # plot schuster and Brooks data
@@ -4415,7 +4411,7 @@ def main():
 
     # plot ratios
     if ratios_plot:
-        plot_ratios(fin, dets, cwd, p_dir, pulse_shape=False, uncalibrated=True, bl_only=True, save_plots=False)
+        plot_ratios(fin, dets, cwd, p_dir, pulse_shape=True, uncalibrated=True, bl_only=True, save_plots=False)
 
     if adc_vs_cal:
         adc_vs_cal_ratios(fin, dets, cwd, p_dir, plot_fit_ratio=True)
