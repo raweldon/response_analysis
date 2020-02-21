@@ -1614,7 +1614,6 @@ def plot_ratios(fin, dets, cwd, p_dir, pulse_shape, uncalibrated, bl_only, save_
                     ratio.append(max(ql)/min(ql))                
                 else:
                     continue
-        print ratio
         return ratio
 
     for i, f in enumerate(fin):
@@ -1744,7 +1743,6 @@ def plot_ratios(fin, dets, cwd, p_dir, pulse_shape, uncalibrated, bl_only, save_
                         cp_b_ql_uncal = remove_cal(cp_b_ql, c, b)
                         rat = a_ql_uncal/cp_b_ql_uncal
 
-                    print det, rat
                     ratio.append(rat)
                     uncert.append(unc)
                     shape = '^'
@@ -4411,7 +4409,7 @@ def main():
 
     # plot ratios
     if ratios_plot:
-        plot_ratios(fin, dets, cwd, p_dir, pulse_shape=True, uncalibrated=True, bl_only=True, save_plots=False)
+        plot_ratios(fin, dets, cwd, p_dir, pulse_shape=True, uncalibrated=True, bl_only=True, save_plots=True)
 
     if adc_vs_cal:
         adc_vs_cal_ratios(fin, dets, cwd, p_dir, plot_fit_ratio=True)
